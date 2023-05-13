@@ -2,8 +2,8 @@
 
 Run a `setup_grasp_exp.py` script. It will:
 - roslaunch the file for tiago and zed
-- setup tfs for map to tiago and for table to 'correct' tsdf frame
 - setup optitrack, moveit etc.
+- setup tfs for map to tiago and for table to 'correct' tsdf frame
 - roslaunch tiago dual pick place
 
 Setup tiago dual pick place to:

@@ -46,7 +46,7 @@
   <!-- 1. Launch natnet bridge to get optitrack tfs -->
   <include file="$(find natnet_bridge)/launch/natnet_bridge.launch"/>
   <!-- 2. Sync tiago torso lift link TF with optitrack -->
-  <node name="tf_sync" pkg="neugraspnet" type="tf_sync.py" output="screen"/>
+  <node name="optitrack_tf_sync" pkg="neugraspnet" type="optitrack_tf_sync.py" output="screen"/>
 
   <!-- Optional: Viz in rviz -->
   <!-- <node pkg="rviz" type="rviz" output="screen" name="rviz" args="-d $(find neugraspnet)/rviz/rviz.rviz" /> -->

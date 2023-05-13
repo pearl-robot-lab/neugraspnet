@@ -1,3 +1,4 @@
+from pathlib import Path
 import rospy
 import geometry_msgs
 from sensor_msgs.msg import PointCloud2, Image
@@ -9,8 +10,11 @@ import tf
 import tf2_ros
 import numpy as np
 import open3d as o3d
+
+# neugraspnet repo imports
 from vgn.perception import CameraIntrinsic, TSDFVolume
 from vgn.utils.transform import Rotation, Transform
+from vgn.detection_implicit import VGNImplicit
 
 ################################################ 
 # Perception pipeline
@@ -20,20 +24,33 @@ SCENE_SIZE = 0.3 # size of the scene in meters
 
 rospy.init_node('grasp_objs')
 
-# get the pointcloud from the topic
-pcl_topic_name = "/zed2/zed_node/point_cloud/cloud_registered"
-depth_topic_name = "/zed2/zed_node/depth/depth_registered"
-
 class GraspGenerator:
-	def __init__(self, tsdf_res=64, downsampl_size=0.005):
+	def __init__(self, camera_type='zed', tsdf_res=64, downsampl_size=0.005):
+		
+		# Setup camera
+		self.camera_type = camera_type
+		if self.camera_type == 'zed':
+			# get the pointcloud from the topic
+			pcl_topic_name = "/zed2/zed_node/point_cloud/cloud_registered"
+			depth_topic_name = "/zed2/zed_node/depth/depth_registered"
+			# camera intrinsic parameters (TODO: Get this from /zed2/zed_node/depth/camera_info topic)
+			self.camera_intrinsic = CameraIntrinsic(width=640, height=360,
+													fx=262.1390075683594, fy=262.1390075683594,
+													cx=311.67730712890625, cy=185.56422424316406)
+		elif self.camera_type == 'xtion':
+			pcl_topic_name = "/xtion/depth_registered/points"
+			depth_topic_name = "/xtion/depth/image_rect"
+			# camera intrinsic parameters (TODO: Get this from /xtion/depth/camera_info topic)
+			self.camera_intrinsic = CameraIntrinsic(width=640, height=480,
+													fx=520.7559204101562, fy=524.538330078125,
+													cx=331.348811989792, cy=239.89580009973724)
+		else:
+			raise ValueError('Invalid camera type. Choose either zed or xtion.')
+		
 		# point cloud subscriber
 		self.cloud_sub = rospy.Subscriber(pcl_topic_name, PointCloud2, self.pcl_callback, queue_size=1, buff_size=52428800)
 		# depth image subscriber
 		self.depth_sub = rospy.Subscriber(depth_topic_name, Image, self.depth_callback, queue_size=1, buff_size=52428800)
-		# camera intrinsic parameters (TODO: Get this from /zed2/zed_node/depth/camera_info topic)
-		self.camera_intrinsic = CameraIntrinsic(width=640, height=360,
-					  							fx=262.1390075683594, fy=262.1390075683594,
-												cx=311.67730712890625, cy=185.56422424316406)
 
 		# tf listener to get the point cloud in the correct frame
 		self.tf_buffer = tf2_ros.Buffer()
@@ -45,7 +62,10 @@ class GraspGenerator:
 
 	def pcl_callback(self, ros_point_cloud):
 		# transform the point cloud to the grasp_origin frame
-		table_to_pcl_tf = self.tf_buffer.lookup_transform('grasp_origin', 'zed2_left_camera_frame', rospy.Time(0))
+		if self.camera_type == 'zed':
+			table_to_pcl_tf = self.tf_buffer.lookup_transform('grasp_origin', 'zed2_left_camera_frame', rospy.Time(0))
+		elif self.camera_type == 'xtion':
+			table_to_pcl_tf = self.tf_buffer.lookup_transform('grasp_origin', 'xtion_rgb_optical_frame', rospy.Time(0))
 		cloud_transformed = do_transform_cloud(ros_point_cloud, table_to_pcl_tf)
 		# convert to numpy array
 		pc = ros_numpy.numpify(cloud_transformed)
@@ -68,7 +88,10 @@ class GraspGenerator:
 		# o3d.visualization.draw_geometries([pcd, origin])
 
 	def depth_callback(self, ros_depth_image):
-		cam_to_table_tf = self.tf_buffer.lookup_transform('zed2_left_camera_optical_frame', 'grasp_origin', rospy.Time(0))
+		if self.camera_type == 'zed':
+			cam_to_table_tf = self.tf_buffer.lookup_transform('zed2_left_camera_optical_frame', 'grasp_origin', rospy.Time(0))
+		elif self.camera_type == 'xtion':
+			cam_to_table_tf = self.tf_buffer.lookup_transform('xtion_rgb_optical_frame', 'grasp_origin', rospy.Time(0))
 		camera_extrinsic_mat = ros_numpy.numpify(cam_to_table_tf.transform)
 		self.camera_extrinsic = Transform.from_matrix(camera_extrinsic_mat)
 		
@@ -90,9 +113,9 @@ class GraspGenerator:
 		tsdf.integrate(self.depth_img, self.camera_intrinsic, self.camera_extrinsic)
 
 		# Debug: viz tsdf
-		# pcl_tsdf = tsdf.get_cloud()
-		# pcl_tsdf.colors = o3d.utility.Vector3dVector(np.tile(np.array([0, 0, 0]), (np.asarray(pcl_tsdf.points).shape[0], 1)))
-		# o3d.visualization.draw_geometries([pcl_tsdf, self.pcd])
+		pcl_tsdf = tsdf.get_cloud()
+		pcl_tsdf.colors = o3d.utility.Vector3dVector(np.tile(np.array([0, 0, 0]), (np.asarray(pcl_tsdf.points).shape[0], 1)))
+		o3d.visualization.draw_geometries([pcl_tsdf, self.pcd])
 
 		pcd_down = self.pcd.voxel_down_sample(voxel_size=self.downsampl_size)
 
@@ -101,11 +124,29 @@ class GraspGenerator:
 		# o3d.visualization.draw_geometries([pcd_down, self.pcd])
 
 		return tsdf, pcd_down
+	
+	def setup_grasp_planner(self, model, type, qual_th=0.5, force=False, seen_pc_only=False, visualize=False):
+		self.grasp_planner = VGNImplicit(model,
+                                    type,
+                                    qual_th=qual_th,
+                                    force_detection=force,
+                                    seen_pc_only=seen_pc_only,
+                                    resolution=self.tsdf_res,
+                                    visualize=visualize)
+		
+	def get_grasps(self):
+        
+		grasps, scores = self.grasp_planner.get_grasps(self.pcd, self.tsdf, self.camera_intrinsic, self.camera_extrinsic)
+	
+		return grasps, scores
 
 
-grasper = GraspGenerator()
+grasper = GraspGenerator(camera_type='zed')
 rospy.sleep(2)
 tsdf, pc = grasper.get_tsdf_and_down_pcd()
+model_path = Path('/home/hypatia/6D-DAAD/GIGA/data/best_real_robot_runs/23-05-11-13-30-59_dataset=data_pile_train_constructed_ROBOTIQ,augment=False,net=6d_neu_grasp_pn_deeper,batch_size=16,lr=5e-05/best_neural_grasp_neu_grasp_pn_deeper_val_acc=0.8511.pt')
+model_type = 'neu_grasp_pn_deeper'
+grasper.setup_grasp_planner(model=model_path, type=model_type, qual_th=0.5, force=False, seen_pc_only=False, visualize=True)
 rospy.spin()
 # - Then call the clutter detection implicit function to get grasps and scores. Use the viz
 # - We get back grasps and scores and can then call the appropriate tiago dual pick place function that can handle multiple grasps
