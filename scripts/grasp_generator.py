@@ -1,4 +1,5 @@
 from pathlib import Path
+import argparse
 import rospy
 import geometry_msgs
 from sensor_msgs.msg import PointCloud2, Image
@@ -15,6 +16,7 @@ import open3d as o3d
 from vgn.perception import CameraIntrinsic, TSDFVolume
 from vgn.utils.transform import Rotation, Transform
 from vgn.detection_implicit import VGNImplicit
+from vgn.simulation import ClutterRemovalSim
 
 ################################################ 
 # Perception pipeline
@@ -125,18 +127,30 @@ class GraspGenerator:
 
 		return tsdf, pcd_down
 	
-	def setup_grasp_planner(self, model, type, qual_th=0.5, force=False, seen_pc_only=False, visualize=False):
+	def setup_grasp_planner(self, model, type, qual_th=0.5, force=False, seen_pc_only=False, vis_mesh=False):
+
 		self.grasp_planner = VGNImplicit(model,
                                     type,
                                     qual_th=qual_th,
                                     force_detection=force,
                                     seen_pc_only=seen_pc_only,
                                     resolution=self.tsdf_res,
-                                    visualize=visualize)
+                                    visualize=vis_mesh)
 		
-	def get_grasps(self):
+	def get_grasps(self, sim, tsdf, pc, visualize=True):
+		# build state
+		state = argparse.Namespace(tsdf=tsdf, pc=pc)
+
+		if visualize:
+			# Running viz of the scene point clouds and meshes
+			o3d_vis = o3d.visualization.Visualizer()
+			o3d_vis.create_window()
+			state.pc.colors = o3d.utility.Vector3dVector(np.tile(np.array([0, 0, 0]), (np.asarray(state.pc.points).shape[0], 1)))
+			o3d_vis.add_geometry(state.pc, reset_bounding_box=True)
+		else:
+			o3d_vis = None
         
-		grasps, scores = self.grasp_planner.get_grasps(self.pcd, self.tsdf, self.camera_intrinsic, self.camera_extrinsic)
+		grasps, scores = self.grasp_planner(state, sim=sim, o3d_vis=o3d_vis)
 	
 		return grasps, scores
 
@@ -144,9 +158,11 @@ class GraspGenerator:
 grasper = GraspGenerator(camera_type='zed')
 rospy.sleep(2)
 tsdf, pc = grasper.get_tsdf_and_down_pcd()
-model_path = Path('/home/hypatia/6D-DAAD/GIGA/data/best_real_robot_runs/23-05-11-13-30-59_dataset=data_pile_train_constructed_ROBOTIQ,augment=False,net=6d_neu_grasp_pn_deeper,batch_size=16,lr=5e-05/best_neural_grasp_neu_grasp_pn_deeper_val_acc=0.8511.pt')
+model_path = Path('/neugraspnet/neugraspnet_repo/data/best_real_robot_runs/best_neural_grasp_neu_grasp_pn_deeper_val_acc=0.8511.pt')
 model_type = 'neu_grasp_pn_deeper'
-grasper.setup_grasp_planner(model=model_path, type=model_type, qual_th=0.5, force=False, seen_pc_only=False, visualize=True)
+sim = ClutterRemovalSim('pile', 'pile/test', gripper_type='robotiq', gui=False, data_root='/neugraspnet/neugraspnet_repo/') # dummy sim just for parameters
+grasper.setup_grasp_planner(model=model_path, type=model_type, qual_th=0.5, force=False, seen_pc_only=False)
+grasp, scores = grasper.get_grasps(sim, tsdf, pc, visualize=True)
 rospy.spin()
 # - Then call the clutter detection implicit function to get grasps and scores. Use the viz
 # - We get back grasps and scores and can then call the appropriate tiago dual pick place function that can handle multiple grasps
