@@ -10,7 +10,8 @@ import tf2_ros
 
 import pdb
 
-rospy.init_node('tf_sync')
+SCENE_SIZE = 0.3 # size of the scene in meters
+rospy.init_node('optitrack_tf_sync')
 listener = tf.TransformListener()
 br = tf2_ros.TransformBroadcaster()
 rate = rospy.Rate(100.0) # run at 100Hz
@@ -39,5 +40,22 @@ while not rospy.is_shutdown():
 	t.transform.rotation.w = rot_torso_map[3]
 	# publish the message
 	br.sendTransform(t)
+
+	# publish a table to grasp origin tf
+	# create the message
+	grasp_origin_t = geometry_msgs.msg.TransformStamped()
+	grasp_origin_t.header.stamp = rospy.Time.now()
+	grasp_origin_t.header.frame_id = "table"
+	grasp_origin_t.child_frame_id = "grasp_origin"
+	# add the translation and rotation to pose
+	grasp_origin_t.transform.translation.x = -SCENE_SIZE/2.0
+	grasp_origin_t.transform.translation.y = -SCENE_SIZE/2.0
+	grasp_origin_t.transform.translation.z = -0.03
+	grasp_origin_t.transform.rotation.x = 0.0
+	grasp_origin_t.transform.rotation.y = 0.0
+	grasp_origin_t.transform.rotation.z = 0.0
+	grasp_origin_t.transform.rotation.w = 1.0
+	# publish the message
+	br.sendTransform(grasp_origin_t)
 	
 	rate.sleep()
