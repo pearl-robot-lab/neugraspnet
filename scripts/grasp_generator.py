@@ -162,7 +162,7 @@ model_path = Path('/neugraspnet/neugraspnet_repo/data/best_real_robot_runs/best_
 model_type = 'neu_grasp_pn_deeper'
 sim = ClutterRemovalSim('pile', 'pile/test', gripper_type='robotiq', gui=False, data_root='/neugraspnet/neugraspnet_repo/') # dummy sim just for parameters
 grasper.setup_grasp_planner(model=model_path, type=model_type, qual_th=0.5, force=False, seen_pc_only=False)
-grasp, scores = grasper.get_grasps(sim, tsdf, pc, visualize=True)
+grasp, scores, _, _ = grasper.get_grasps(sim, tsdf, pc, visualize=True)
 rospy.spin()
 # - Then call the clutter detection implicit function to get grasps and scores. Use the viz
 # - We get back grasps and scores and can then call the appropriate tiago dual pick place function that can handle multiple grasps
