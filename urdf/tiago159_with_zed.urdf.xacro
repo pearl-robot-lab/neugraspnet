@@ -177,8 +177,9 @@
   </link>
 
   <!-- ZED camera -->
-  <xacro:arg name="zed_pos_x"     default="0.077" />
-  <xacro:arg name="zed_pos_y"     default="0.18" /> <!-- TODO Fine-tune coordinates  -->
+  <!-- TODO Fine-tune coordinates  -->
+  <xacro:arg name="zed_pos_x"     default="0.085" /> <!-- 0.077 -->
+  <xacro:arg name="zed_pos_y"     default="0.165" /> <!-- 0.18  -->   
   <xacro:arg name="zed_pos_z"     default="0.0" />
   <xacro:arg name="zed_roll"      default="-1.57079632679" />
   <xacro:arg name="zed_pitch"     default="0.0" />
