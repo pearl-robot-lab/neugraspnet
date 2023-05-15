@@ -1,7 +1,7 @@
 # from pathlib import Path
 # import argparse
 import rospy
-# import geometry_msgs
+import geometry_msgs
 from sensor_msgs.msg import PointCloud2
 from std_srvs.srv import Empty, EmptyRequest
 # import sensor_msgs.point_cloud2 as pc2
@@ -15,6 +15,10 @@ import numpy as np
 
 from grasp_generator import GraspGenerator
 
+# tiago dual pick place
+# from tiago_dual_pick_place.srv import PickPlaceSimple
+from moveit_msgs.msg import MoveItErrorCodes
+from tf.transformations import euler_from_quaternion, quaternion_from_euler, quaternion_from_matrix
 
 class GrasperMoveit:
 	def __init__(self, camera_type='zed', octomap_topic_name="/filtered_points_for_mapping", arm="left"):
@@ -66,8 +70,23 @@ rospy.init_node('grasper_moveit')
 grasper = GrasperMoveit()
 grasper.start_mapping()
 rospy.sleep(1)
-grasper.stop_mapping()
+# grasper.stop_mapping()
 grasps, scores = grasper.grasp_gen.get_grasps(visualize=True)
 # Send grasp command to moveit pick and place pipeline
-
+grasp_pose_pub = rospy.Publisher('/grasp/pose', geometry_msgs.msg.PoseStamped, queue_size=1, latch=True)
+grasp_pose_msg = geometry_msgs.msg.PoseStamped()
+grasp_pose_msg.header.stamp = rospy.Time.now()
+grasp_pose_msg.header.frame_id = 'base_footprint'
+grasp_pose_msg.pose.position.x = 0.5
+grasp_pose_msg.pose.position.y = -0.5
+grasp_pose_msg.pose.position.z = 0.75
+grasp_pose_msg.pose.orientation.x = 0.0
+grasp_pose_msg.pose.orientation.y = 0.0
+grasp_pose_msg.pose.orientation.z = 0.0
+grasp_pose_msg.pose.orientation.w = 1.0
+grasp_pose_pub.publish(grasp_pose_msg)
+# rospy.loginfo("[Sending /pick command...]")
+# # call /pick rosservice
+# grasper.current_arm = 'left'
+# pick_result = rospy.ServiceProxy('/pick', PickPlaceSimple)(grasper.current_arm)
 rospy.spin()
