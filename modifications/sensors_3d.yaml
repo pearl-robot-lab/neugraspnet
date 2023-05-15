@@ -5,7 +5,7 @@ sensors:
     max_update_rate: 1.0
     padding_offset: 0.1
     padding_scale: 1.0
-    # point_cloud_topic: /throttle_filtering_points/filtered_points
-    point_cloud_topic: /zed2/zed_node/point_cloud/cloud_registered
+    point_cloud_topic: /filtered_points_for_mapping
+    # point_cloud_topic: /zed2/zed_node/point_cloud/cloud_registered
     point_subsample: 1
     sensor_plugin: occupancy_map_monitor/PointCloudOctomapUpdater
