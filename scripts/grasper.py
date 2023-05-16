@@ -17,6 +17,9 @@ from tiago_dual_pick_place.srv import PickPlaceSimple
 from moveit_msgs.msg import MoveItErrorCodes
 from tf.transformations import euler_from_quaternion, quaternion_from_euler, quaternion_from_matrix
 
+from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal
+from actionlib import SimpleActionClient
+
 # Reads the generated grasps and sends them to the pick place service. Also activates and deactivates mapping
 
 class Grasper:
@@ -48,7 +51,7 @@ class Grasper:
 
 		# We can optionally filter the point cloud to remove points very close to the grasp
 		self.filter_pcl = filter_pcl
-		self.filter_radius = 0.07 # 7cm
+		self.filter_radius = 0.06 # 6cm
 		
 		self.octomap_topic_name = octomap_topic_name
 		self.octomap_pub = rospy.Publisher(self.octomap_topic_name, PointCloud2, queue_size=1, latch=True)
@@ -113,16 +116,36 @@ class Grasper:
 		self.pcl_sub.unregister()
 	
 	def start_mapping(self):
+		# start forwarding the point cloud to the moveit octomap server topic
+		self.pcl_sub = rospy.Subscriber(self.pcl_topic_name, PointCloud2, self.forward_pcl, queue_size=1)
 		# Clear existing octomap
 		rospy.loginfo("Clearing octomap")
 		self.clear_octomap_srv.call(EmptyRequest())
-		# start forwarding the point cloud to the moveit octomap server topic
-		self.pcl_sub = rospy.Subscriber(self.pcl_topic_name, PointCloud2, self.forward_pcl, queue_size=1)
+		rospy.sleep(1.0)
+
+
+def lift_torso(play_m_ac):
+	# Move torso up
+	pmg = PlayMotionGoal()
+	pmg.motion_name = 'raise_torso'
+	pmg.skip_planning = True
+	play_m_ac.send_goal_and_wait(pmg)
+
+def lower_torso(play_m_ac):
+	# Move torso down
+	pmg = PlayMotionGoal()
+	pmg.motion_name = 'lower_torso'
+	pmg.skip_planning = True
+	play_m_ac.send_goal_and_wait(pmg)
 
 
 # Run as a script
 rospy.init_node('grasper_node')
 
+# Optional: Use playmotion
+rospy.loginfo("[Waiting for '/play_motion' ActionServer...]")
+play_m_ac = SimpleActionClient('/play_motion', PlayMotionAction)
+    
 grasper = Grasper()
 
 # Get grasps from the grasp generator
@@ -131,6 +154,15 @@ grasper.grasp_pose_array = rospy.wait_for_message(grasper.grasps_sub_topic, Pose
 
 rospy.loginfo("[Received %d grasp poses]",len(grasper.grasp_pose_array.poses))
 
+# Move torso down
+lower_torso(play_m_ac)
+
+# clean and setup the octomap:
+grasper.current_grasp_pose = grasper.grasp_pose_array.poses[0]
+grasper.start_mapping()
+rospy.sleep(1.0)
+grasper.stop_mapping()
+
 # We assume the grasp poses are sorted by score, so we start from the topic
 for i, grasp_pose in enumerate(grasper.grasp_pose_array.poses):
 	rospy.loginfo("[Trying grasp %d/%d]", i+1, len(grasper.grasp_pose_array.poses))
@@ -138,7 +170,9 @@ for i, grasp_pose in enumerate(grasper.grasp_pose_array.poses):
 	grasper.current_grasp_pose = grasp_pose
 	# Start mapping with filtering enabled. This should filter out the points very close to the CURRENT grasp
 	grasper.start_mapping()
-	rospy.sleep(1.5)
+	rospy.loginfo("Clearing octomap")
+	grasper.clear_octomap_srv.call(EmptyRequest())
+	rospy.sleep(1.0)
 	grasper.stop_mapping()
 	# publish this grasp pose to the topic that pick-place pipeline expects
 	grasp_pub_msg = PoseStamped()
@@ -156,11 +190,42 @@ for i, grasp_pose in enumerate(grasper.grasp_pose_array.poses):
 		rospy.loginfo("[Pick successful!]")
 		# If so, we can stop here
 		break
+	elif pick_result.error_code == MoveItErrorCodes.CONTROL_FAILED:
+		rospy.loginfo("[Pick successful with some gripper failure....]")
+		# If so, we can stop here
+		break
+	elif pick_result.error_code == MoveItErrorCodes.MOTION_PLAN_INVALIDATED_BY_ENVIRONMENT_CHANGE:
+		rospy.loginfo("[Pick failed due to environment change?...]")
+		# If not, we try the next grasp pose
+		break
 	else:
 		rospy.loginfo("[Pick failed. Trying next grasp pose...]")
 		# If not, we try the next grasp pose
 		continue
 
+import pdb; pdb.set_trace()
+
+# Move torso to its maximum height
+lift_torso(play_m_ac)
+
+# Raise arm
+rospy.loginfo("Moving arm to a safe pose")
+pmg = PlayMotionGoal()
+pmg.motion_name = 'pick_final_pose_' + grasper.current_arm[0]  # take first char
+pmg.skip_planning = False
+rospy.loginfo("Sending final arm command...")
+play_m_ac.send_goal_and_wait(pmg)
+rospy.sleep(1.0)
+
+# Open grippers
+rospy.loginfo("Opening grippers")
+pmg = PlayMotionGoal()
+pmg.motion_name = 'open_gripper_' + grasper.current_arm[0]  # take first char
+pmg.skip_planning = True
+play_m_ac.send_goal_and_wait(pmg)
+
+# Move torso back down
+lower_torso(play_m_ac)
 
 # # Testtttt
 # grasper.start_mapping()

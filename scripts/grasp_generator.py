@@ -32,7 +32,7 @@ class GraspGenerator:
 		
 		# Publish grasps to topic
 		self.grasp_topic_name = grasp_topic_name
-		self.grasp_pub = rospy.Publisher(self.grasp_topic_name, PoseArray, queue_size=1, latch=False)
+		self.grasp_pub = rospy.Publisher(self.grasp_topic_name, PoseArray, queue_size=1, latch=True)
 
 		# grasps fill be in this frame
 		self.grasp_frame_name = grasp_frame_name
@@ -67,7 +67,8 @@ class GraspGenerator:
 		self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
 		if net_path is None:
-			net_path = Path('/neugraspnet/neugraspnet_repo/data/best_real_robot_runs/PACKED_best_neural_grasp_neu_grasp_pn_deeper_val_acc=0.9040.pt')
+			net_path = Path('/neugraspnet/neugraspnet_repo/data/best_real_robot_runs/PILE_neural_grasp_neu_grasp_pn_deeper_468244.pt')
+			# net_path = Path('/neugraspnet/neugraspnet_repo/data/best_real_robot_runs/PACKED_best_neural_grasp_neu_grasp_pn_deeper_val_acc=0.9040.pt')
 
 		self.size = scene_size
 		self.tsdf_res = tsdf_res
@@ -110,7 +111,9 @@ class GraspGenerator:
 		# remove nans
 		points = points[~np.isnan(points).any(axis=1)]
 		# crop point cloud
-		points = points[(points[:,0] > 0) & (points[:,0] < self.size) & (points[:,1] > 0) & (points[:,1] < self.size) & (points[:,2] > 0) & (points[:,2] < self.size)]
+		# only z axis
+		points = points[(points[:,2] > 0) & (points[:,2] < self.size)]
+		# points = points[(points[:,0] > 0) & (points[:,0] < self.size) & (points[:,1] > 0) & (points[:,1] < self.size) & (points[:,2] > 0) & (points[:,2] < self.size)]
 		
 		# convert to open3d point cloud
 		pcd = o3d.geometry.PointCloud()
@@ -188,7 +191,8 @@ class GraspGenerator:
 			
 			# Reset view
 			ctr = o3d_vis.get_view_control()
-			parameters = o3d.io.read_pinhole_camera_parameters("/neugraspnet/neugraspnet_repo/o3d_vis_screen_camera_params2.json")
+			# parameters = o3d.io.read_pinhole_camera_parameters("/neugraspnet/neugraspnet_repo/o3d_vis_screen_camera_params2.json")
+			parameters = o3d.io.read_pinhole_camera_parameters("/neugraspnet/neugraspnet_repo/ScreenCamera_2023-05-16-21-41-29.json")
 			ctr.convert_from_pinhole_camera_parameters(parameters)
 			for i in range(50):
 				o3d_vis.poll_events()
@@ -242,6 +246,7 @@ if len(grasps) > 0:
 		while not rospy.is_shutdown():
 			o3d_vis.poll_events()
 			o3d_vis.update_renderer()
+			# import pdb; pdb.set_trace()
 	rospy.spin()
 else:
 	print("[No grasps found]")

@@ -50,7 +50,7 @@ while not rospy.is_shutdown():
 	# add the translation and rotation to pose
 	grasp_origin_t.transform.translation.x = -SCENE_SIZE/2.0
 	grasp_origin_t.transform.translation.y = -SCENE_SIZE/2.0
-	grasp_origin_t.transform.translation.z = -0.03
+	grasp_origin_t.transform.translation.z = -0.04
 	grasp_origin_t.transform.rotation.x = 0.0
 	grasp_origin_t.transform.rotation.y = 0.0
 	grasp_origin_t.transform.rotation.z = 0.0
