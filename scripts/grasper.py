@@ -161,6 +161,15 @@ def move_torso(torso_cmd, torso_pos):
 # Run as a script
 rospy.init_node('grasper_node')
 
+# Use gripper grasp service:
+gripper_right_grasp_srv = rospy.ServiceProxy('/gripper_right_controller/grasp', Empty)
+gripper_left_grasp_srv = rospy.ServiceProxy('/gripper_left_controller/grasp', Empty)
+# Set low pressure
+left_pressure = 0.07
+right_pressure = 0.07
+rospy.set_param('/gripper_left_grasping/gripper_left_grasp_service/pressure', left_pressure)
+rospy.set_param('/gripper_right_grasping/gripper_right_grasp_service/pressure', right_pressure)
+
 # Optional: Use playmotion
 rospy.loginfo("[Waiting for '/play_motion' ActionServer...]")
 play_m_ac = SimpleActionClient('/play_motion', PlayMotionAction)
@@ -171,6 +180,11 @@ head_cmd = rospy.Publisher('/head_controller/command', JointTrajectory, queue_si
 
 grasper = Grasper()
 
+if grasper.current_arm == 'right':
+	grasper.gripper_grasp_srv = gripper_right_grasp_srv
+elif grasper.current_arm == 'left':
+	grasper.gripper_grasp_srv = gripper_left_grasp_srv
+
 # Setup grasp service to trigger grasp generation using service call:
 rospy.loginfo("[Waiting for grasp service: %s...]", grasper.grasp_srv_name)
 rospy.wait_for_service(grasper.grasp_srv_name)
@@ -178,97 +192,116 @@ grasp_srv = rospy.ServiceProxy(grasper.grasp_srv_name, Empty)
 
 
 # while scene is not emptied:
+while not rospy.is_shutdown():
+	success = False
 
-# Go to home position?
-# rospy.loginfo("[Going to home position...]")
-# pmg = PlayMotionGoal()
-# pmg.motion_name = 'pregrasp_l'
-# pmg.skip_planning = True
-# play_m_ac.send_goal_and_wait(pmg)
-# Move torso down (TODO: move to randomized torso and head position)
-move_torso(torso_cmd, 0.1)
-rospy.sleep(3.0)
+	# Go to home position?
+	# rospy.loginfo("[Going to home position...]")
+	# pmg = PlayMotionGoal()
+	# pmg.motion_name = 'pregrasp_l'
+	# pmg.skip_planning = True
+	# play_m_ac.send_goal_and_wait(pmg)
+	# Move torso down (TODO: move to randomized torso and head position)
+	move_torso(torso_cmd, 0.1)
+	rospy.sleep(3.0)
 
-# Get grasps from the grasp generator
-rospy.loginfo("[Triggering grasp generation...]")
-grasp_srv.call(EmptyRequest())
-# Get from topic:
-rospy.loginfo("[Waiting for grasps published on topic: %s...]", grasper.grasps_sub_topic)
-grasper.grasp_pose_array = rospy.wait_for_message(grasper.grasps_sub_topic, PoseArray, timeout=3)
-rospy.loginfo("[Received %d grasps]", len(grasper.grasp_pose_array.poses))
+	# Get grasps from the grasp generator
+	rospy.loginfo("[Triggering grasp generation...]")
+	grasp_srv.call(EmptyRequest())
+	# Get from topic:
+	rospy.loginfo("[Waiting for grasps published on topic: %s...]", grasper.grasps_sub_topic)
+	grasper.grasp_pose_array = rospy.wait_for_message(grasper.grasps_sub_topic, PoseArray, timeout=3)
+	rospy.loginfo("[Received %d grasps]", len(grasper.grasp_pose_array.poses))
 
-# clean and setup the octomap:
-grasper.current_grasp_pose = grasper.grasp_pose_array.poses[0]
-grasper.start_mapping()
-rospy.sleep(1.0)
-grasper.stop_mapping()
-
-# We assume the grasp poses are sorted by score, so we start from the topic
-for i, grasp_pose in enumerate(grasper.grasp_pose_array.poses):
-	rospy.loginfo("[Trying grasp %d/%d]", i+1, len(grasper.grasp_pose_array.poses))
-	# Set current in the grasper object
-	grasper.current_grasp_pose = grasp_pose
-	# Start mapping with filtering enabled. This should filter out the points very close to the CURRENT grasp
+	# clean and setup the octomap:
+	grasper.current_grasp_pose = grasper.grasp_pose_array.poses[0]
 	grasper.start_mapping()
-	rospy.loginfo("Clearing octomap")
-	grasper.clear_octomap_srv.call(EmptyRequest())
 	rospy.sleep(1.0)
 	grasper.stop_mapping()
-	
-	# publish this grasp pose to the topic that pick-place pipeline expects
-	grasp_pub_msg = PoseStamped()
-	grasp_pub_msg.header.stamp = rospy.Time.now()
-	grasp_pub_msg.header.frame_id = grasper.grasp_frame_name
-	grasp_pub_msg.pose = grasp_pose
-	grasper.grasp_pub.publish(grasp_pub_msg)
 
-	# Now call the pick service and wait for the result
-	rospy.loginfo("[Calling pick service...]")
-	pick_result = rospy.ServiceProxy('/pick', PickPlaceSimple)(grasper.current_arm)
+	# We assume the grasp poses are sorted by score, so we start from the topic
+	for i, grasp_pose in enumerate(grasper.grasp_pose_array.poses):
+		rospy.loginfo("[Trying grasp %d/%d]", i+1, len(grasper.grasp_pose_array.poses))
+		# Set current in the grasper object
+		grasper.current_grasp_pose = grasp_pose
+		# Start mapping with filtering enabled. This should filter out the points very close to the CURRENT grasp
+		grasper.start_mapping()
+		rospy.loginfo("Clearing octomap")
+		grasper.clear_octomap_srv.call(EmptyRequest())
+		rospy.sleep(1.0)
+		grasper.stop_mapping()
+		
+		# publish this grasp pose to the topic that pick-place pipeline expects
+		grasp_pub_msg = PoseStamped()
+		grasp_pub_msg.header.stamp = rospy.Time.now()
+		grasp_pub_msg.header.frame_id = grasper.grasp_frame_name
+		grasp_pub_msg.pose = grasp_pose
+		grasper.grasp_pub.publish(grasp_pub_msg)
 
-	# Check if the pick was successful
-	if pick_result.error_code == MoveItErrorCodes.SUCCESS:
-		rospy.loginfo("[Pick successful!]")
-		# If so, we can stop here
-		break
-	elif pick_result.error_code == MoveItErrorCodes.CONTROL_FAILED:
-		rospy.loginfo("[Pick successful with some gripper failure....]")
-		# If so, we can stop here
-		break
-	elif pick_result.error_code == MoveItErrorCodes.MOTION_PLAN_INVALIDATED_BY_ENVIRONMENT_CHANGE:
-		rospy.loginfo("[Pick failed due to environment change?...]")
-		# If not, we try the next grasp pose
+		# Now call the pick service and wait for the result
+		rospy.loginfo("[Calling pick service...]")
+		pick_result = rospy.ServiceProxy('/pick', PickPlaceSimple)(grasper.current_arm)
+
+		# Check if the pick was successful
+		if pick_result.error_code == MoveItErrorCodes.SUCCESS:
+			success = True
+			rospy.loginfo("[Pick successful!]")
+			# If so, we can stop here
+			break
+		elif pick_result.error_code == MoveItErrorCodes.CONTROL_FAILED:
+			success = True
+			rospy.loginfo("[Pick successful with some gripper failure....]")
+			# If so, we can stop here
+			break
+		elif pick_result.error_code == MoveItErrorCodes.MOTION_PLAN_INVALIDATED_BY_ENVIRONMENT_CHANGE:
+			success = True
+			rospy.loginfo("[Pick failed due to environment change?...]")
+			# If not, we try the next grasp pose
+			break
+		else:
+			rospy.loginfo("[Pick failed. Trying next grasp pose...]")
+			debug_try_once_more = True
+			if debug_try_once_more:
+				grasper.start_mapping()
+				rospy.loginfo("Clearing octomap")
+				grasper.clear_octomap_srv.call(EmptyRequest())
+				rospy.sleep(1.0)
+				grasper.stop_mapping()
+				# Now call the pick service and wait for the result
+				rospy.loginfo("[Calling pick service...]")
+				pick_result = rospy.ServiceProxy('/pick', PickPlaceSimple)(grasper.current_arm)
+
+			# If not, we try the next grasp pose
+			continue
+
+	# If we didn't succeed, we can stop here
+	if not success:
+		rospy.loginfo("[No more grasp poses to try. Exiting...]")
 		break
 	else:
-		rospy.loginfo("[Pick failed. Trying next grasp pose...]")
-		# If not, we try the next grasp pose
-		continue
+		# execute grasp
+		grasper.gripper_grasp_srv()
 
-import pdb; pdb.set_trace()
+		# Move torso up
+		move_torso(torso_cmd, 0.25)
+		rospy.sleep(3.0)
 
-# Move torso up
-move_torso(torso_cmd, 0.3)
-rospy.sleep(3.0)
+		# Raise arm
+		rospy.loginfo("Moving arm to a safe pose")
+		pmg = PlayMotionGoal()
+		pmg.motion_name = 'pick_final_pose_' + grasper.current_arm[0]  # take first char
+		pmg.skip_planning = False
+		rospy.loginfo("Sending final arm command...")
+		play_m_ac.send_goal_and_wait(pmg)
+		rospy.sleep(1.0)
 
-# Raise arm
-rospy.loginfo("Moving arm to a safe pose")
-pmg = PlayMotionGoal()
-pmg.motion_name = 'pick_final_pose_' + grasper.current_arm[0]  # take first char
-pmg.skip_planning = False
-rospy.loginfo("Sending final arm command...")
-play_m_ac.send_goal_and_wait(pmg)
-rospy.sleep(1.0)
+		# Open grippers
+		rospy.loginfo("Opening grippers")
+		pmg = PlayMotionGoal()
+		pmg.motion_name = 'open_gripper_' + grasper.current_arm[0]  # take first char
+		pmg.skip_planning = True
+		play_m_ac.send_goal_and_wait(pmg)
 
-# Open grippers
-rospy.loginfo("Opening grippers")
-pmg = PlayMotionGoal()
-pmg.motion_name = 'open_gripper_' + grasper.current_arm[0]  # take first char
-pmg.skip_planning = True
-play_m_ac.send_goal_and_wait(pmg)
-
-# Move torso back down
-move_torso(torso_cmd, 0.1)
-rospy.sleep(3.0)
 
 # # Testtttt
 # grasper.start_mapping()
