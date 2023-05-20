@@ -18,6 +18,7 @@ from moveit_msgs.msg import MoveItErrorCodes
 from tf.transformations import euler_from_quaternion, quaternion_from_euler, quaternion_from_matrix
 
 from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from actionlib import SimpleActionClient
 
 # Reads the generated grasps and sends them to the pick place service. Also activates and deactivates mapping
@@ -119,25 +120,42 @@ class Grasper:
 	def start_mapping(self):
 		# start forwarding the point cloud to the moveit octomap server topic
 		self.pcl_sub = rospy.Subscriber(self.pcl_topic_name, PointCloud2, self.forward_pcl, queue_size=1)
-		# Clear existing octomap
-		rospy.loginfo("Clearing octomap")
-		self.clear_octomap_srv.call(EmptyRequest())
-		rospy.sleep(1.0)
+		# # Clear existing octomap here?
+		# rospy.sleep(1.0)
+		# rospy.loginfo("Clearing octomap")
+		# self.clear_octomap_srv.call(EmptyRequest())
+		
 
 
-def lift_torso(play_m_ac):
-	# Move torso up
-	pmg = PlayMotionGoal()
-	pmg.motion_name = 'raise_torso'
-	pmg.skip_planning = True
-	play_m_ac.send_goal_and_wait(pmg)
+def lift_torso(torso_cmd):
+	rospy.loginfo("Moving torso up")
+	jt = JointTrajectory()
+	jt.joint_names = ['torso_lift_joint']
+	jtp = JointTrajectoryPoint()
+	jtp.positions = [0.35]
+	jtp.time_from_start = rospy.Duration(1.0)
+	jt.points.append(jtp)
+	torso_cmd.publish(jt)
 
-def lower_torso(play_m_ac):
-	# Move torso down
-	pmg = PlayMotionGoal()
-	pmg.motion_name = 'lower_torso'
-	pmg.skip_planning = True
-	play_m_ac.send_goal_and_wait(pmg)
+def lower_torso(torso_cmd):
+	rospy.loginfo("Moving torso down")
+	jt = JointTrajectory()
+	jt.joint_names = ['torso_lift_joint']
+	jtp = JointTrajectoryPoint()
+	jtp.positions = [0.0]
+	jtp.time_from_start = rospy.Duration(1.0)
+	jt.points.append(jtp)
+	torso_cmd.publish(jt)
+
+def move_torso(torso_cmd, torso_pos):
+	rospy.loginfo("Moving torso to custom position")
+	jt = JointTrajectory()
+	jt.joint_names = ['torso_lift_joint']
+	jtp = JointTrajectoryPoint()
+	jtp.positions = [torso_pos]
+	jtp.time_from_start = rospy.Duration(1.0)
+	jt.points.append(jtp)
+	torso_cmd.publish(jt)
 
 
 # Run as a script
@@ -146,22 +164,38 @@ rospy.init_node('grasper_node')
 # Optional: Use playmotion
 rospy.loginfo("[Waiting for '/play_motion' ActionServer...]")
 play_m_ac = SimpleActionClient('/play_motion', PlayMotionAction)
-    
+# Optional: torso and head commanders
+torso_cmd = rospy.Publisher('/torso_controller/command', JointTrajectory, queue_size=1, latch=True)
+head_cmd = rospy.Publisher('/head_controller/command', JointTrajectory, queue_size=1, latch=True)
+
+
 grasper = Grasper()
 
-# Get grasps from the grasp generator
-# trigger grasp generation using service call:
+# Setup grasp service to trigger grasp generation using service call:
 rospy.loginfo("[Waiting for grasp service: %s...]", grasper.grasp_srv_name)
 rospy.wait_for_service(grasper.grasp_srv_name)
 grasp_srv = rospy.ServiceProxy(grasper.grasp_srv_name, Empty)
+
+
+# while scene is not emptied:
+
+# Go to home position?
+# rospy.loginfo("[Going to home position...]")
+# pmg = PlayMotionGoal()
+# pmg.motion_name = 'pregrasp_l'
+# pmg.skip_planning = True
+# play_m_ac.send_goal_and_wait(pmg)
+# Move torso down (TODO: move to randomized torso and head position)
+move_torso(torso_cmd, 0.1)
+rospy.sleep(3.0)
+
+# Get grasps from the grasp generator
+rospy.loginfo("[Triggering grasp generation...]")
 grasp_srv.call(EmptyRequest())
 # Get from topic:
 rospy.loginfo("[Waiting for grasps published on topic: %s...]", grasper.grasps_sub_topic)
-grasper.grasp_pose_array = rospy.wait_for_message(grasper.grasps_sub_topic, PoseArray, timeout=300)
+grasper.grasp_pose_array = rospy.wait_for_message(grasper.grasps_sub_topic, PoseArray, timeout=3)
 rospy.loginfo("[Received %d grasps]", len(grasper.grasp_pose_array.poses))
-
-# Move torso down
-lower_torso(play_m_ac)
 
 # clean and setup the octomap:
 grasper.current_grasp_pose = grasper.grasp_pose_array.poses[0]
@@ -180,6 +214,7 @@ for i, grasp_pose in enumerate(grasper.grasp_pose_array.poses):
 	grasper.clear_octomap_srv.call(EmptyRequest())
 	rospy.sleep(1.0)
 	grasper.stop_mapping()
+	
 	# publish this grasp pose to the topic that pick-place pipeline expects
 	grasp_pub_msg = PoseStamped()
 	grasp_pub_msg.header.stamp = rospy.Time.now()
@@ -211,8 +246,9 @@ for i, grasp_pose in enumerate(grasper.grasp_pose_array.poses):
 
 import pdb; pdb.set_trace()
 
-# Move torso to its maximum height
-lift_torso(play_m_ac)
+# Move torso up
+move_torso(torso_cmd, 0.3)
+rospy.sleep(3.0)
 
 # Raise arm
 rospy.loginfo("Moving arm to a safe pose")
@@ -231,7 +267,8 @@ pmg.skip_planning = True
 play_m_ac.send_goal_and_wait(pmg)
 
 # Move torso back down
-lower_torso(play_m_ac)
+move_torso(torso_cmd, 0.1)
+rospy.sleep(3.0)
 
 # # Testtttt
 # grasper.start_mapping()
