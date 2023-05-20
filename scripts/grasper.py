@@ -165,8 +165,8 @@ rospy.init_node('grasper_node')
 gripper_right_grasp_srv = rospy.ServiceProxy('/gripper_right_controller/grasp', Empty)
 gripper_left_grasp_srv = rospy.ServiceProxy('/gripper_left_controller/grasp', Empty)
 # Set low pressure
-left_pressure = 0.07
-right_pressure = 0.07
+left_pressure = 0.05
+right_pressure = 0.05
 rospy.set_param('/gripper_left_grasping/gripper_left_grasp_service/pressure', left_pressure)
 rospy.set_param('/gripper_right_grasping/gripper_right_grasp_service/pressure', right_pressure)
 
@@ -196,11 +196,14 @@ while not rospy.is_shutdown():
 	success = False
 
 	# Go to home position?
-	# rospy.loginfo("[Going to home position...]")
+	# Raise arm
+	# rospy.loginfo("Moving arm to a safe pose")
 	# pmg = PlayMotionGoal()
-	# pmg.motion_name = 'pregrasp_l'
-	# pmg.skip_planning = True
+	# pmg.motion_name = 'pick_final_pose_' + grasper.current_arm[0]  # take first char
+	# pmg.skip_planning = False
+	# rospy.loginfo("Sending final arm command...")
 	# play_m_ac.send_goal_and_wait(pmg)
+	# rospy.sleep(1.0)
 	# Move torso down (TODO: move to randomized torso and head position)
 	move_torso(torso_cmd, 0.1)
 	rospy.sleep(3.0)
@@ -260,7 +263,7 @@ while not rospy.is_shutdown():
 			break
 		else:
 			rospy.loginfo("[Pick failed. Trying next grasp pose...]")
-			debug_try_once_more = True
+			debug_try_once_more = False
 			if debug_try_once_more:
 				grasper.start_mapping()
 				rospy.loginfo("Clearing octomap")
@@ -283,7 +286,7 @@ while not rospy.is_shutdown():
 		grasper.gripper_grasp_srv()
 
 		# Move torso up
-		move_torso(torso_cmd, 0.25)
+		move_torso(torso_cmd, 0.3)
 		rospy.sleep(3.0)
 
 		# Raise arm
