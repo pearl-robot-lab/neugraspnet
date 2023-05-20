@@ -23,13 +23,14 @@ from actionlib import SimpleActionClient
 # Reads the generated grasps and sends them to the pick place service. Also activates and deactivates mapping
 
 class Grasper:
-	def __init__(self, grasps_sub_topic="/generated_grasps", grasp_pub_topic="/grasp/pose", grasp_frame_name='grasp_origin',
+	def __init__(self, grasps_sub_topic="/generated_grasps", grasp_srv_name='get_grasps', grasp_pub_topic="/grasp/pose", grasp_frame_name='grasp_origin',
 	      		camera_type='zed', octomap_topic_name="/filtered_points_for_mapping", filter_pcl=True, arm="right"):
 		
 		self.grasps_sub_topic = grasps_sub_topic
 
 		self.grasp_pub_topic = grasp_pub_topic
 		self.grasp_pub = rospy.Publisher(self.grasp_pub_topic, PoseStamped, queue_size=1, latch=True)
+		self.grasp_srv_name = grasp_srv_name # when using the grasp service, we don't need to subscribe to the grasps topic
 
 		self.grasp_frame_name = grasp_frame_name
 		# tf listener to get the point cloud in the correct frame
@@ -149,10 +150,15 @@ play_m_ac = SimpleActionClient('/play_motion', PlayMotionAction)
 grasper = Grasper()
 
 # Get grasps from the grasp generator
+# trigger grasp generation using service call:
+rospy.loginfo("[Waiting for grasp service: %s...]", grasper.grasp_srv_name)
+rospy.wait_for_service(grasper.grasp_srv_name)
+grasp_srv = rospy.ServiceProxy(grasper.grasp_srv_name, Empty)
+grasp_srv.call(EmptyRequest())
+# Get from topic:
 rospy.loginfo("[Waiting for grasps published on topic: %s...]", grasper.grasps_sub_topic)
 grasper.grasp_pose_array = rospy.wait_for_message(grasper.grasps_sub_topic, PoseArray, timeout=300)
-
-rospy.loginfo("[Received %d grasp poses]",len(grasper.grasp_pose_array.poses))
+rospy.loginfo("[Received %d grasps]", len(grasper.grasp_pose_array.poses))
 
 # Move torso down
 lower_torso(play_m_ac)

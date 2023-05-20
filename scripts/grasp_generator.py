@@ -4,7 +4,7 @@ import rospy
 # import geometry_msgs
 from sensor_msgs.msg import PointCloud2, Image
 from geometry_msgs.msg import PoseArray, Pose
-from std_srvs.srv import Empty, EmptyRequest
+from std_srvs.srv import Empty, EmptyResponse
 # import sensor_msgs.point_cloud2 as pc2
 # from std_msgs.msg import Header
 from tf2_sensor_msgs.tf2_sensor_msgs import do_transform_cloud
@@ -35,8 +35,8 @@ class GraspGenerator:
 		self.grasp_topic_name = grasp_topic_name
 		self.grasp_pub = rospy.Publisher(self.grasp_topic_name, PoseArray, queue_size=1, latch=True)
 
-		# provide grasps via service call
-		self.grasp_srv = rospy.Service(grasp_srv_name, Empty, self.get_grasps_srv_callback)
+		# trigger grasp generation via service call
+		self.grasp_srv = rospy.Service(grasp_srv_name, Empty, self.grasps_srv_callback)
 
 		# grasps fill be in this frame
 		self.grasp_frame_name = grasp_frame_name
@@ -218,7 +218,7 @@ class GraspGenerator:
 	
 		return grasps_final, scores
 	
-	def get_grasps_srv_callback(self, req):
+	def grasps_srv_callback(self, req):
 
 		grasps, scores = self.get_grasps()
 		# Make grasp pose array message
@@ -246,7 +246,7 @@ class GraspGenerator:
 		else:
 			print("[No grasps found]")
 		
-		return grasp_pose_array
+		return EmptyResponse()
 
 
 # Run this as a script
