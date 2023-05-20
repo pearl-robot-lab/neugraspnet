@@ -4,6 +4,7 @@ import rospy
 # import geometry_msgs
 from sensor_msgs.msg import PointCloud2, Image
 from geometry_msgs.msg import PoseArray, Pose
+from std_srvs.srv import Empty, EmptyRequest
 # import sensor_msgs.point_cloud2 as pc2
 # from std_msgs.msg import Header
 from tf2_sensor_msgs.tf2_sensor_msgs import do_transform_cloud
@@ -27,12 +28,15 @@ from vgn.simulation import ClutterRemovalSim
 # SCENE_SIZE = 0.3 # size of the scene in meters
 
 class GraspGenerator:
-	def __init__(self, grasp_frame_name='grasp_origin', grasp_topic_name="/generated_grasps", camera_type='zed',
+	def __init__(self, grasp_frame_name='grasp_origin', grasp_srv_name='get_grasps', grasp_topic_name="/generated_grasps", camera_type='zed',
 	      		 net_type='neu_grasp_pn_deeper', net_path=None, tsdf_res=64, scene_size=0.3, downsampl_size=0.005):
 		
 		# Publish grasps to topic
 		self.grasp_topic_name = grasp_topic_name
 		self.grasp_pub = rospy.Publisher(self.grasp_topic_name, PoseArray, queue_size=1, latch=True)
+
+		# provide grasps via service call
+		self.grasp_srv = rospy.Service(grasp_srv_name, Empty, self.get_grasps_srv_callback)
 
 		# grasps fill be in this frame
 		self.grasp_frame_name = grasp_frame_name
@@ -75,6 +79,8 @@ class GraspGenerator:
 		self.downsampl_size = downsampl_size
 
 		self.setup_grasp_planner(model=net_path, type=net_type, qual_th=0.5, force=False, seen_pc_only=False)
+
+		self.o3d_vis = None # open3d visualizer
 
 	def setup_grasp_planner(self, model, type, qual_th=0.5, force=False, seen_pc_only=False, vis_mesh=False):
 
@@ -170,7 +176,7 @@ class GraspGenerator:
 
 		return tsdf, pcd_down
 
-	def get_grasps(self, visualize=True):
+	def get_grasps(self):
 		
 		# Get the point cloud and depth image from their respective topics
 		ros_point_cloud = rospy.wait_for_message(self.pcl_topic_name, PointCloud2, timeout=10)
@@ -182,28 +188,25 @@ class GraspGenerator:
 		# build state
 		state = argparse.Namespace(tsdf=tsdf, pc=pc)
 
-		if visualize:
+		if self.o3d_vis is not None:
 			# Running viz of the scene point clouds and meshes
-			o3d_vis = o3d.visualization.Visualizer()
-			o3d_vis.create_window(width=1863, height=1052)
+			self.o3d_vis.clear_geometries() # clear previous geometries
 			state.pc.colors = o3d.utility.Vector3dVector(np.tile(np.array([0, 0, 0]), (np.asarray(state.pc.points).shape[0], 1)))
-			o3d_vis.add_geometry(state.pc, reset_bounding_box=True)
-			
+			self.o3d_vis.add_geometry(state.pc, reset_bounding_box=True)			
+			self.o3d_vis.poll_events()
+			self.o3d_vis.update_renderer()			
 			# Reset view
-			ctr = o3d_vis.get_view_control()
-			# parameters = o3d.io.read_pinhole_camera_parameters("/neugraspnet/neugraspnet_repo/o3d_vis_screen_camera_params2.json")
-			parameters = o3d.io.read_pinhole_camera_parameters("/neugraspnet/neugraspnet_repo/ScreenCamera_2023-05-16-21-41-29.json")
+			ctr = grasp_gen.o3d_vis.get_view_control()
+			parameters = o3d.io.read_pinhole_camera_parameters("/neugraspnet/neugraspnet_repo/ScreenCamera_2023-05-20-17-48-26.json")
 			ctr.convert_from_pinhole_camera_parameters(parameters)
 			for i in range(50):
-				o3d_vis.poll_events()
-				o3d_vis.update_renderer()
-		else:
-			o3d_vis = None
+				grasp_gen.o3d_vis.poll_events()
+				grasp_gen.o3d_vis.update_renderer()
         
 		# dummy sim just for parameters. TODO: clean this up
 		sim = ClutterRemovalSim('pile', 'pile/test', gripper_type='robotiq', gui=False, data_root='/neugraspnet/neugraspnet_repo/')
 
-		grasps, scores, _, _ = self.grasp_planner(state, sim=sim, o3d_vis=o3d_vis)
+		grasps, scores, _, _ = self.grasp_planner(state, sim=sim, o3d_vis=self.o3d_vis)
 
 		# convert grasps to standard XYZ co-ordinate frame (neugraspnet and vgn use a different grasp convention)
 		grasps_final = []
@@ -213,40 +216,60 @@ class GraspGenerator:
 			grasp_tf = Transform(grasp_frame_rot, grasp_center).as_matrix()
 			grasps_final.append(grasp_tf)
 	
-		return grasps_final, scores, o3d_vis
+		return grasps_final, scores
+	
+	def get_grasps_srv_callback(self, req):
 
-# # Run this as a script
+		grasps, scores = self.get_grasps()
+		# Make grasp pose array message
+		grasp_pose_array = PoseArray()
+		grasp_pose_array.header.frame_id = grasp_gen.grasp_frame_name
+		grasp_pose_array.header.stamp = rospy.Time.now()
+
+		if len(grasps) > 0:
+			print("Found {} grasps with scores: {}".format(len(grasps), scores))
+			# We also publish the grasps to the appropriate topic
+			rospy.loginfo("Publishing grasps to topic: {}".format(grasp_gen.grasp_topic_name))
+			grasp_pose_array.poses = [Pose() for _ in range(len(grasps))]
+			for i, grasp in enumerate(grasps):
+				grasp_pose_array.poses[i].position.x = grasp[0,3]
+				grasp_pose_array.poses[i].position.y = grasp[1,3]
+				grasp_pose_array.poses[i].position.z = grasp[2,3]
+				rot_quatt = quaternion_from_matrix(grasp)
+				grasp_pose_array.poses[i].orientation.x = rot_quatt[0]
+				grasp_pose_array.poses[i].orientation.y = rot_quatt[1]
+				grasp_pose_array.poses[i].orientation.z = rot_quatt[2]
+				grasp_pose_array.poses[i].orientation.w = rot_quatt[3]
+			
+			# Publish
+			grasp_gen.grasp_pub.publish(grasp_pose_array)
+		else:
+			print("[No grasps found]")
+		
+		return grasp_pose_array
+
+
+# Run this as a script
 rospy.init_node('grasp_generator')
 grasp_gen = GraspGenerator(camera_type='zed')
-grasps, scores, o3d_vis = grasp_gen.get_grasps(visualize=True)
-if len(grasps) > 0:
-	print("Found {} grasps with scores: {}".format(len(grasps), scores))
-	# We publish the grasps to the appropriate topic
-	rospy.loginfo("Publishing grasps to topic: {}".format(grasp_gen.grasp_topic_name))
-	# Make grasp pose array message
-	grasp_pose_array = PoseArray()
-	grasp_pose_array.header.frame_id = grasp_gen.grasp_frame_name
-	grasp_pose_array.header.stamp = rospy.Time.now()
-	grasp_pose_array.poses = [Pose() for _ in range(len(grasps))]
-	for i, grasp in enumerate(grasps):
-		grasp_pose_array.poses[i].position.x = grasp[0,3]
-		grasp_pose_array.poses[i].position.y = grasp[1,3]
-		grasp_pose_array.poses[i].position.z = grasp[2,3]
-		rot_quatt = quaternion_from_matrix(grasp)
-		grasp_pose_array.poses[i].orientation.x = rot_quatt[0]
-		grasp_pose_array.poses[i].orientation.y = rot_quatt[1]
-		grasp_pose_array.poses[i].orientation.z = rot_quatt[2]
-		grasp_pose_array.poses[i].orientation.w = rot_quatt[3]
-	
-	# Publish
-	grasp_gen.grasp_pub.publish(grasp_pose_array)
 
-	if o3d_vis:
-		# Run viz
-		while not rospy.is_shutdown():
-			o3d_vis.poll_events()
-			o3d_vis.update_renderer()
-			# import pdb; pdb.set_trace()
+# Optional visualization
+visualize = True
+if visualize:
+	# Running viz of the scene point clouds and meshes
+	grasp_gen.o3d_vis = o3d.visualization.Visualizer()
+	grasp_gen.o3d_vis.create_window(width=1853, height=1025)
+	
+	# # DEBUG: run grasp generator
+	# grasps, scores = grasp_gen.get_grasps()
+	# print("Found {} grasps with scores: {}".format(len(grasps), scores))
+
+	# # Optional: Keep running viz (Slows down everything else)
+	# while not rospy.is_shutdown():
+	# 	grasp_gen.o3d_vis.poll_events()
+	# 	grasp_gen.o3d_vis.update_renderer()
+	# rate.sleep()
 	rospy.spin()
 else:
-	print("[No grasps found]")
+	grasp_gen.o3d_vis = None
+	rospy.spin()
