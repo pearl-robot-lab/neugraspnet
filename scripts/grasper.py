@@ -20,6 +20,7 @@ from tf.transformations import euler_from_quaternion, quaternion_from_euler, qua
 from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from actionlib import SimpleActionClient
+from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal, MoveBaseResult, MoveBaseActionResult
 
 # Reads the generated grasps and sends them to the pick place service. Also activates and deactivates mapping
 
@@ -157,9 +158,62 @@ def move_torso(torso_cmd, torso_pos):
 	jt.points.append(jtp)
 	torso_cmd.publish(jt)
 
+def move_head(head_cmd, join_1_pos, joint_2_pos=None):
+	rospy.loginfo("Moving head...")
+	jt = JointTrajectory()
+	jt.joint_names = ['head_1_joint', 'head_2_joint']
+	jtp = JointTrajectoryPoint()
+	if joint_2_pos is None:
+		jtp.positions = [join_1_pos, -0.98]
+	else:
+		jtp.positions = [join_1_pos, joint_2_pos]
+	jtp.time_from_start = rospy.Duration(1.0)
+	jt.points.append(jtp)
+	head_cmd.publish(jt)
+
+def move_base_in_tab_frame(move_base_ac, xyz_quat):
+	# Move base to xyz, quat
+	rospy.loginfo("Moving base to xyz, quat")
+	move_goal = MoveBaseGoal()
+	move_goal.target_pose.header.stamp = rospy.Time.now()
+	move_goal.target_pose.header.frame_id = "table"
+	move_goal.target_pose.pose.position.x = xyz_quat[0]
+	move_goal.target_pose.pose.position.y = xyz_quat[1]
+	move_goal.target_pose.pose.position.z = xyz_quat[2]
+	move_goal.target_pose.pose.orientation.x = xyz_quat[3]
+	move_goal.target_pose.pose.orientation.y = xyz_quat[4]
+	move_goal.target_pose.pose.orientation.z = xyz_quat[5]
+	move_goal.target_pose.pose.orientation.w = xyz_quat[6]
+	move_base_ac.send_goal_and_wait(move_goal)
+
+	return move_base_ac.get_state() # result
+
 
 # Run as a script
 rospy.init_node('grasper_node')
+
+# Optional: Use base placement and head randomization
+randomize_views = True
+base_place_final_right = [-0.645, -0.152, -0.463, -0.000, -0.005,  0.525, 0.851] # x,y,z,quat
+base_place_final_left  = [-0.653, -0.029, -0.460,  0.005,  0.001, -0.600, 0.800] # x,y,z,quat
+
+base_placements_right = [[-0.645, -0.152, -0.463, -0.000, -0.005,  0.525, 0.851], # x,y,z,quat
+						 [-0.659, -0.163, -0.461,  0.001, -0.003,  0.352, 0.936]] # x,y,z,quat
+base_placements_left  = [[-0.707,  0.131, -0.459,  0.001,  0.000, -0.275, 0.961], # x,y,z,quat
+						 [-0.689,  0.169, -0.460,  0.003, -0.000, -0.498, 0.867]] # x,y,z,quat
+
+# Move head accordingly (head_joint_1 only)
+head_placements_right = [-0.61, -0.60] # joint 1 only
+head_placements_left  = [0.26, 0.33] # joint 1 only
+head_joint2_range     = [-0.98, -0.7] # joint 2 only # small range to ensure we look down
+
+# Create move base action client
+rospy.loginfo("Waiting for /move_base AS")
+move_base_ac = SimpleActionClient('/move_base', MoveBaseAction)
+if not move_base_ac.wait_for_server(rospy.Duration(15)):
+	rospy.logerr("Could not connect to /move_base AS")
+	exit()
+
 
 # Use gripper grasp service:
 gripper_right_grasp_srv = rospy.ServiceProxy('/gripper_right_controller/grasp', Empty)
@@ -191,10 +245,68 @@ rospy.wait_for_service(grasper.grasp_srv_name)
 grasp_srv = rospy.ServiceProxy(grasper.grasp_srv_name, Empty)
 
 
+# Optional: tuck in arms to pregrasp position
+# tuck in arm
+rospy.loginfo("Preparing arm")
+pmg = PlayMotionGoal()
+pmg.motion_name = 'prep_l'
+pmg.skip_planning = False
+import pdb; pdb.set_trace()
+play_m_ac.send_goal_and_wait(pmg)
+# rospy.sleep(2.0)
+# tuck in arm
+rospy.loginfo("Preparing arm")
+pmg = PlayMotionGoal()
+pmg.motion_name = 'prep_r'
+pmg.skip_planning = False
+play_m_ac.send_goal_and_wait(pmg)
+# rospy.sleep(2.0)
+
 # while scene is not emptied:
 while not rospy.is_shutdown():
 	success = False
 
+	if randomize_views:
+		
+		# Choose left or right arm
+		# grasper.current_arm = np.random.choice(['right', 'left'])
+		if grasper.current_arm == 'right':
+			grasper.current_arm = 'left'
+		else:
+			grasper.current_arm = 'right'
+		rospy.loginfo("Using [%s] arm", grasper.current_arm)
+		
+		if grasper.current_arm == 'right':
+			# Move base to a random position
+			rospy.loginfo("Moving base to a random position")
+			place_index = np.random.randint(0, len(base_placements_right))
+			move_base_in_tab_frame(move_base_ac, base_placements_right[place_index])
+			# Move head
+			random_head_2 = np.random.uniform(head_joint2_range[0], head_joint2_range[1])
+			move_head(head_cmd, head_placements_right[place_index], random_head_2)
+			# randomize torso
+			random_torso_pos = np.random.uniform(0.0, 0.15)
+			move_torso(torso_cmd, random_torso_pos)
+			rospy.sleep(2.0)
+			
+			# Use correct gripper
+			grasper.gripper_grasp_srv = gripper_right_grasp_srv
+		elif grasper.current_arm == 'left':
+			# Move base to a random position
+			rospy.loginfo("Moving base to a random position")
+			place_index = np.random.randint(0, len(base_placements_left))
+			move_base_in_tab_frame(move_base_ac, base_placements_left[place_index])
+			# Move head
+			random_head_2 = np.random.uniform(head_joint2_range[0], head_joint2_range[1])
+			move_head(head_cmd, head_placements_left[place_index], random_head_2)
+			# randomize torso
+			random_torso_pos = np.random.uniform(0.0, 0.15)
+			move_torso(torso_cmd, random_torso_pos)
+			rospy.sleep(2.0)
+			# Use correct gripper
+			grasper.gripper_grasp_srv = gripper_left_grasp_srv
+	else:
+		pass
 	# Go to home position?
 	# Raise arm
 	# rospy.loginfo("Moving arm to a safe pose")
@@ -205,8 +317,8 @@ while not rospy.is_shutdown():
 	# play_m_ac.send_goal_and_wait(pmg)
 	# rospy.sleep(1.0)
 	# Move torso down (TODO: move to randomized torso and head position)
-	move_torso(torso_cmd, 0.1)
-	rospy.sleep(3.0)
+	# move_torso(torso_cmd, 0.1)
+	# rospy.sleep(3.0)
 
 	# Get grasps from the grasp generator
 	rospy.loginfo("[Triggering grasp generation...]")
@@ -217,10 +329,10 @@ while not rospy.is_shutdown():
 	rospy.loginfo("[Received %d grasps]", len(grasper.grasp_pose_array.poses))
 
 	# clean and setup the octomap:
-	grasper.current_grasp_pose = grasper.grasp_pose_array.poses[0]
-	grasper.start_mapping()
-	rospy.sleep(1.0)
-	grasper.stop_mapping()
+	# grasper.current_grasp_pose = grasper.grasp_pose_array.poses[0]
+	# grasper.start_mapping()
+	# rospy.sleep(1.0)
+	# grasper.stop_mapping()
 
 	# We assume the grasp poses are sorted by score, so we start from the topic
 	for i, grasp_pose in enumerate(grasper.grasp_pose_array.poses):
@@ -246,24 +358,13 @@ while not rospy.is_shutdown():
 		pick_result = rospy.ServiceProxy('/pick', PickPlaceSimple)(grasper.current_arm)
 
 		# Check if the pick was successful
-		if pick_result.error_code == MoveItErrorCodes.SUCCESS:
+		if (pick_result.error_code == MoveItErrorCodes.SUCCESS or pick_result.error_code == MoveItErrorCodes.CONTROL_FAILED):
 			success = True
 			rospy.loginfo("[Pick successful!]")
 			# If so, we can stop here
 			break
-		elif pick_result.error_code == MoveItErrorCodes.CONTROL_FAILED:
-			success = True
-			rospy.loginfo("[Pick successful with some gripper failure....]")
-			# If so, we can stop here
-			break
-		elif pick_result.error_code == MoveItErrorCodes.MOTION_PLAN_INVALIDATED_BY_ENVIRONMENT_CHANGE:
-			success = True
-			rospy.loginfo("[Pick failed due to environment change?...]")
-			# If not, we try the next grasp pose
-			break
 		else:
-			rospy.loginfo("[Pick failed. Trying next grasp pose...]")
-			debug_try_once_more = False
+			debug_try_once_more = True
 			if debug_try_once_more:
 				grasper.start_mapping()
 				rospy.loginfo("Clearing octomap")
@@ -274,7 +375,15 @@ while not rospy.is_shutdown():
 				rospy.loginfo("[Calling pick service...]")
 				pick_result = rospy.ServiceProxy('/pick', PickPlaceSimple)(grasper.current_arm)
 
+				# Check if the pick was successful
+				if (pick_result.error_code == MoveItErrorCodes.SUCCESS or pick_result.error_code == MoveItErrorCodes.CONTROL_FAILED):
+					success = True
+					rospy.loginfo("[Pick successful!]")
+					# If so, we can stop here
+					break
+		
 			# If not, we try the next grasp pose
+			rospy.loginfo("[Pick failed. Trying next grasp pose...]")
 			continue
 
 	# If we didn't succeed, we can stop here
@@ -298,12 +407,40 @@ while not rospy.is_shutdown():
 		play_m_ac.send_goal_and_wait(pmg)
 		rospy.sleep(1.0)
 
+		if randomize_views:
+			# Move base to final pose
+			rospy.loginfo("Moving base to final pose")
+			if grasper.current_arm == 'right':
+				move_base_in_tab_frame(move_base_ac, base_place_final_right)
+			elif grasper.current_arm == 'left':
+				move_base_in_tab_frame(move_base_ac, base_place_final_left)
+			rospy.sleep(2.0)
+
+		# Move torso down
+		move_torso(torso_cmd, 0.1)
+		rospy.sleep(3.6)
+
 		# Open grippers
 		rospy.loginfo("Opening grippers")
 		pmg = PlayMotionGoal()
 		pmg.motion_name = 'open_gripper_' + grasper.current_arm[0]  # take first char
 		pmg.skip_planning = True
 		play_m_ac.send_goal_and_wait(pmg)
+
+		if grasper.current_arm == 'left':
+			# Also go back to pick final pose
+			pmg = PlayMotionGoal()
+			pmg.motion_name = 'pick_final_pose_l'
+			pmg.skip_planning = False
+			play_m_ac.send_goal_and_wait(pmg)
+			
+		# tuck in arm
+		rospy.loginfo("Preparing arm")
+		pmg = PlayMotionGoal()
+		pmg.motion_name = 'prep_' + grasper.current_arm[0] # take first char
+		pmg.skip_planning = False
+		play_m_ac.send_goal_and_wait(pmg)
+		rospy.sleep(2.0)
 
 
 # # Testtttt

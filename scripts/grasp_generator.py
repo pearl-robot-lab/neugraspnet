@@ -71,8 +71,8 @@ class GraspGenerator:
 		self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
 		if net_path is None:
-			net_path = Path('/neugraspnet/neugraspnet_repo/data/best_real_robot_runs/PILE_neural_grasp_neu_grasp_pn_deeper_468244.pt')
-			# net_path = Path('/neugraspnet/neugraspnet_repo/data/best_real_robot_runs/PACKED_best_neural_grasp_neu_grasp_pn_deeper_val_acc=0.9040.pt')
+			# net_path = Path('/neugraspnet/neugraspnet_repo/data/best_real_robot_runs/PILE_neural_grasp_neu_grasp_pn_deeper_468244.pt')
+			net_path = Path('/neugraspnet/neugraspnet_repo/data/best_real_robot_runs/PACKED_best_neural_grasp_neu_grasp_pn_deeper_val_acc=0.9040.pt')
 
 		self.size = scene_size
 		self.tsdf_res = tsdf_res
@@ -244,7 +244,9 @@ class GraspGenerator:
 			# Publish
 			grasp_gen.grasp_pub.publish(grasp_pose_array)
 		else:
-			print("[No grasps found]")
+			print("[No grasps found. Publishing empty pose array]")
+			# Publish empty pose array
+			grasp_gen.grasp_pub.publish(grasp_pose_array)
 		
 		return EmptyResponse()
 
