@@ -204,7 +204,7 @@ base_placements_left  = [[-0.707,  0.131, -0.459,  0.001,  0.000, -0.275, 0.961]
 
 # Move head accordingly (head_joint_1 only)
 head_placements_right = [-0.61, -0.60] # joint 1 only
-head_placements_left  = [0.26, 0.33] # joint 1 only
+head_placements_left  = [0.36, 0.35] # joint 1 only
 head_joint2_range     = [-0.98, -0.7] # joint 2 only # small range to ensure we look down
 
 # Create move base action client
@@ -418,7 +418,7 @@ while not rospy.is_shutdown():
 
 		# Move torso down
 		move_torso(torso_cmd, 0.1)
-		rospy.sleep(3.6)
+		rospy.sleep(4.5)
 
 		# Open grippers
 		rospy.loginfo("Opening grippers")
