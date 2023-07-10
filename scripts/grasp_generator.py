@@ -13,11 +13,13 @@ import ros_numpy
 # import tf
 import tf2_ros
 import numpy as np
+import pickle
 import open3d as o3d
 
 # neugraspnet repo imports
 from vgn.perception import CameraIntrinsic, TSDFVolume
 from vgn.utils.transform import Rotation, Transform
+from vgn.grasp import *
 from vgn.detection_implicit import VGNImplicit
 from vgn.simulation import ClutterRemovalSim
 
@@ -29,7 +31,7 @@ from vgn.simulation import ClutterRemovalSim
 
 class GraspGenerator:
 	def __init__(self, grasp_frame_name='grasp_origin', grasp_srv_name='get_grasps', grasp_topic_name="/generated_grasps", camera_type='zed',
-	      		 net_type='neu_grasp_pn_deeper', net_path=None, tsdf_res=64, scene_size=0.3, downsampl_size=0.005):
+	      		 net_type='neu_grasp_pn_deeper', net_path=None, tsdf_res=64, scene_size=0.3, downsampl_size=0.005, use_reachability=True):
 		
 		# Publish grasps to topic
 		self.grasp_topic_name = grasp_topic_name
@@ -77,9 +79,15 @@ class GraspGenerator:
 		self.size = scene_size
 		self.tsdf_res = tsdf_res
 		self.downsampl_size = downsampl_size
+		self.use_reachability = use_reachability
+		if use_reachability:
+			# Load reachability maps
+			# Temp: only loading right arm reachability map
+			with open('reach_maps/smaller_full_reach_map_gripper_right_grasping_frame_torso_False_0.05.pkl', 'rb') as f:
+				self.right_reachability_map = pickle.load(f)
 
 		self.setup_grasp_planner(model=net_path, type=net_type, qual_th=0.5, force=False, seen_pc_only=False)
-
+		
 		self.o3d_vis = None # open3d visualizer
 
 	def setup_grasp_planner(self, model, type, qual_th=0.5, force=False, seen_pc_only=False, vis_mesh=False):
@@ -215,9 +223,85 @@ class GraspGenerator:
 			grasp_frame_rot =  grasp.pose.rotation * Rotation.from_euler('Y', np.pi/2) * Rotation.from_euler('Z', np.pi)
 			grasp_tf = Transform(grasp_frame_rot, grasp_center).as_matrix()
 			grasps_final.append(grasp_tf)
+		
+		# Optional: Score grasps using a reachability metric
+		if self.use_reachability:
+			scores = self.get_reachability_scores(grasps_final, arm='right')
+			# Sort grasps by score
+			sorted_grasps = [grasps_final[i] for i in reversed(np.argsort(scores))]
+			sorted_scores = [k for k in reversed(np.argsort(scores))]
+			grasps_final = sorted_grasps
 	
-		return grasps_final, scores
+		return grasps_final, sorted_scores
 	
+	def get_reachability_scores(self, grasp_tfs, arm='right'):
+		# Get reachability scores for grasps
+		# (based on https://github.com/iROSA-lab/sampled_reachability_maps)
+		
+		scores = np.zeros((len(grasp_tfs)))
+		
+		if arm == 'left':
+			raise NotImplementedError
+		elif arm == 'right':
+			reach_map = self.right_reachability_map
+		grasp_poses = np.zeros((len(grasp_tfs), 6))
+		for id, grasp_tf in enumerate(grasp_tfs):
+			# Get the 6D euler grasp pose	
+			grasp_poses[id] = np.hstack(( grasp_tf[:3,-1], Rotation.from_matrix(grasp_tf[:3,:3]).as_euler('XYZ') )) # INTRINSIC XYZ
+
+		# if arm == 'left':
+			# min_y, max_y, = (-0.6, 1.35)
+		# else:
+		min_y, max_y, = (-1.35, 0.6)
+		min_x, max_x, = (-1.2, 1.2)
+		min_z, max_z, = (-0.35, 2.1)
+		min_roll, max_roll, = (-np.pi, np.pi)
+		min_pitch, max_pitch, = (-np.pi / 2, np.pi / 2)
+		min_yaw, max_yaw, = (-np.pi, np.pi)
+		cartesian_res = 0.05
+		angular_res = np.pi / 8
+
+		# Mask valid grasp_poses that are inside the min-max xyz bounds of the reachability map
+		mask = np.logical_and.reduce((grasp_poses[:,0] > min_x, grasp_poses[:,0] < max_x,
+									grasp_poses[:,1] > min_y, grasp_poses[:,1] < max_y,
+									grasp_poses[:,2] > min_z, grasp_poses[:,2] < max_z))
+
+		x_bins = np.ceil((max_x - min_x) / cartesian_res)
+		y_bins = np.ceil((max_y - min_y) / cartesian_res)
+		z_bins = np.ceil((max_z - min_z) / cartesian_res)
+		roll_bins = np.ceil((max_roll - min_roll) / angular_res)
+		pitch_bins = np.ceil((max_pitch - min_pitch) / angular_res)
+		yaw_bins = np.ceil((max_yaw - min_yaw) / angular_res)
+
+		# Define the offset values for indexing the map
+		x_ind_offset = y_bins * z_bins * roll_bins * pitch_bins * yaw_bins
+		y_ind_offset = z_bins * roll_bins * pitch_bins * yaw_bins
+		z_ind_offset = roll_bins * pitch_bins * yaw_bins
+		roll_ind_offset = pitch_bins * yaw_bins
+		pitch_ind_offset = yaw_bins
+		yaw_ind_offset = 1
+
+		# Convert the input pose to voxel coordinates
+		x_idx = (np.floor((grasp_poses[mask, 0] - min_x) / cartesian_res)).astype(int)
+		y_idx = (np.floor((grasp_poses[mask, 1] - min_y) / cartesian_res)).astype(int)
+		z_idx = (np.floor((grasp_poses[mask, 2] - min_z) / cartesian_res)).astype(int)
+		roll_idx = (np.floor((grasp_poses[mask, 3] - min_roll) / angular_res)).astype(int)
+		pitch_idx = (np.floor((grasp_poses[mask, 4] - min_pitch) / angular_res)).astype(int)
+		yaw_idx = (np.floor((grasp_poses[mask, 5] - min_yaw) / angular_res)).astype(int)
+		# Handle edge cases of discretization (angles can especially cause issues if values contain both ends [-pi, pi] which we don't want
+		roll_idx = np.clip(roll_idx, 0, roll_bins-1)
+		pitch_idx = np.clip(pitch_idx, 0, pitch_bins-1)
+		yaw_idx = np.clip(yaw_idx, 0, yaw_bins-1)
+
+		# Compute the index in the reachability map array
+		map_idx = x_idx * x_ind_offset + y_idx * y_ind_offset + z_idx * z_ind_offset + roll_idx  \
+		* roll_ind_offset + pitch_idx * pitch_ind_offset + yaw_idx * yaw_ind_offset
+
+		# Get the score from the score map array
+		scores[mask] = reach_map[map_idx.astype(int),-1] # -1 is the score index
+
+		return scores
+
 	def grasps_srv_callback(self, req):
 
 		grasps, scores = self.get_grasps()
