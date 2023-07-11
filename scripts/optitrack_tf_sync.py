@@ -7,6 +7,7 @@ import rospy
 import geometry_msgs
 import tf
 import tf2_ros
+from visualization_msgs.msg import Marker, MarkerArray
 
 import pdb
 
@@ -16,6 +17,9 @@ listener = tf.TransformListener()
 br = tf2_ros.TransformBroadcaster()
 rate = rospy.Rate(100.0) # run at 100Hz
 
+# publish a table object marker
+obj_markers_pub = rospy.Publisher('/obj_markers', MarkerArray, queue_size=1)
+                    
 while not rospy.is_shutdown():
 	try:
 		(trans_torso_map,rot_torso_map) = listener.lookupTransform('torso_lift_link', 'map', rospy.Time(0))
@@ -57,5 +61,33 @@ while not rospy.is_shutdown():
 	grasp_origin_t.transform.rotation.w = 1.0
 	# publish the message
 	br.sendTransform(grasp_origin_t)
+
+	# publish table object marker (mammut)
+	obj_markers_msg = MarkerArray()
+
+	table_marker_msg = Marker()
+	table_marker_msg.id = 10
+	table_marker_msg.type = table_marker_msg.CUBE
+	table_marker_msg.action = table_marker_msg.ADD
+	table_marker_msg.scale.x = 0.57 # 0.6 # 0.55
+	table_marker_msg.scale.y = 0.78 # 0.8 # 0.77
+	table_marker_msg.scale.z = 0.48
+	table_marker_msg.color.r = 1.0
+	table_marker_msg.color.g = 1.0
+	table_marker_msg.color.b = 1.0
+	table_marker_msg.color.a = 1.0
+	# Dynamic table marker
+	table_marker_msg.header.frame_id = 'table'
+	table_marker_msg.pose.orientation.x = 0.0
+	table_marker_msg.pose.orientation.y = 0.0
+	table_marker_msg.pose.orientation.z = 0.0
+	table_marker_msg.pose.orientation.w = 1.0
+	table_marker_msg.pose.position.x = 0.0
+	table_marker_msg.pose.position.y = 0.0
+	table_marker_msg.pose.position.z = -table_marker_msg.scale.z/2.0
+	obj_markers_msg.markers.append(table_marker_msg)
+	# Publish
+	obj_markers_pub.publish(obj_markers_msg)
 	
+
 	rate.sleep()
