@@ -84,7 +84,7 @@ while not rospy.is_shutdown():
 	table_marker_msg.pose.orientation.w = 1.0
 	table_marker_msg.pose.position.x = 0.0
 	table_marker_msg.pose.position.y = 0.0
-	table_marker_msg.pose.position.z = -table_marker_msg.scale.z/2.0
+	table_marker_msg.pose.position.z = -table_marker_msg.scale.z/2.0# - 0.005 # TEMP: Move table down a bit
 	obj_markers_msg.markers.append(table_marker_msg)
 	# Publish
 	obj_markers_pub.publish(obj_markers_msg)

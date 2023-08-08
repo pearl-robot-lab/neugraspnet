@@ -31,7 +31,7 @@ from vgn.simulation import ClutterRemovalSim
 
 class GraspGenerator:
 	def __init__(self, grasp_frame_name='grasp_origin', grasp_srv_name='get_grasps', grasp_topic_name="/generated_grasps", camera_type='zed',
-	      		 net_type='neu_grasp_pn_deeper', net_path=None, tsdf_res=64, scene_size=0.3, downsampl_size=0.005, use_reachability=True):
+	      		 net_type='neu_grasp_pn_deeper', net_path=None, tsdf_res=64, scene_size=0.3, downsampl_size=0.005, use_reachability=False):
 		
 		# Publish grasps to topic
 		self.grasp_topic_name = grasp_topic_name
@@ -231,8 +231,9 @@ class GraspGenerator:
 			sorted_grasps = [grasps_final[i] for i in reversed(np.argsort(scores))]
 			sorted_scores = [k for k in reversed(np.argsort(scores))]
 			grasps_final = sorted_grasps
+			scores = sorted_scores
 	
-		return grasps_final, sorted_scores
+		return grasps_final, scores
 	
 	def get_reachability_scores(self, grasp_tfs, arm='right'):
 		# Get reachability scores for grasps

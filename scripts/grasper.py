@@ -26,7 +26,7 @@ from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal, MoveBaseResult, Mov
 
 class Grasper:
 	def __init__(self, grasps_sub_topic="/generated_grasps", grasp_srv_name='get_grasps', grasp_pub_topic="/grasp/pose", grasp_frame_name='grasp_origin',
-	      		camera_type='zed', octomap_topic_name="/filtered_points_for_mapping", filter_pcl=True, arm="right"):
+	      		camera_type='zed', octomap_topic_name="/filtered_points_for_mapping", filter_pcl=False, arm="right"):
 		
 		self.grasps_sub_topic = grasps_sub_topic
 
@@ -193,12 +193,12 @@ def move_base_in_tab_frame(move_base_ac, xyz_quat):
 rospy.init_node('grasper_node')
 
 # Optional: Use base placement and head randomization
-randomize_views = True
-base_place_final_right = [-0.645, -0.152, -0.463, -0.000, -0.005,  0.525, 0.851] # x,y,z,quat
-base_place_final_left  = [-0.653, -0.029, -0.460,  0.005,  0.001, -0.600, 0.800] # x,y,z,quat
+randomize_views = False
+base_place_final_right = [-0.648, -0.152, -0.463, -0.000, -0.005,  0.525, 0.851] # x,y,z,quat
+base_place_final_left  = [-0.656, -0.029, -0.460,  0.005,  0.001, -0.600, 0.800] # x,y,z,quat
 
-base_placements_right = [[-0.645, -0.152, -0.463, -0.000, -0.005,  0.525, 0.851], # x,y,z,quat
-						 [-0.659, -0.163, -0.461,  0.001, -0.003,  0.352, 0.936]] # x,y,z,quat
+base_placements_right = [[-0.649, -0.152, -0.463, -0.000, -0.005,  0.525, 0.851], # x,y,z,quat
+						 [-0.663, -0.163, -0.461,  0.001, -0.003,  0.352, 0.936]] # x,y,z,quat
 base_placements_left  = [[-0.707,  0.131, -0.459,  0.001,  0.000, -0.275, 0.961], # x,y,z,quat
 						 [-0.689,  0.169, -0.460,  0.003, -0.000, -0.498, 0.867]] # x,y,z,quat
 
@@ -271,7 +271,8 @@ while not rospy.is_shutdown():
 		# Choose left or right arm
 		# grasper.current_arm = np.random.choice(['right', 'left'])
 		if grasper.current_arm == 'right':
-			grasper.current_arm = 'left'
+			# grasper.current_arm = 'left'  # HACK: use right arm for now
+			pass
 		else:
 			grasper.current_arm = 'right'
 		rospy.loginfo("Using [%s] arm", grasper.current_arm)
@@ -287,7 +288,7 @@ while not rospy.is_shutdown():
 			# randomize torso
 			random_torso_pos = np.random.uniform(0.0, 0.15)
 			move_torso(torso_cmd, random_torso_pos)
-			rospy.sleep(2.0)
+			rospy.sleep(3.5)
 			
 			# Use correct gripper
 			grasper.gripper_grasp_srv = gripper_right_grasp_srv
@@ -302,7 +303,7 @@ while not rospy.is_shutdown():
 			# randomize torso
 			random_torso_pos = np.random.uniform(0.0, 0.15)
 			move_torso(torso_cmd, random_torso_pos)
-			rospy.sleep(2.0)
+			rospy.sleep(3.5)
 			# Use correct gripper
 			grasper.gripper_grasp_srv = gripper_left_grasp_srv
 	else:
@@ -327,7 +328,6 @@ while not rospy.is_shutdown():
 	rospy.loginfo("[Waiting for grasps published on topic: %s...]", grasper.grasps_sub_topic)
 	grasper.grasp_pose_array = rospy.wait_for_message(grasper.grasps_sub_topic, PoseArray, timeout=3)
 	rospy.loginfo("[Received %d grasps]", len(grasper.grasp_pose_array.poses))
-
 	# clean and setup the octomap:
 	# grasper.current_grasp_pose = grasper.grasp_pose_array.poses[0]
 	# grasper.start_mapping()
@@ -343,7 +343,7 @@ while not rospy.is_shutdown():
 		grasper.start_mapping()
 		rospy.loginfo("Clearing octomap")
 		grasper.clear_octomap_srv.call(EmptyRequest())
-		rospy.sleep(1.0)
+		# rospy.sleep(1.0)
 		grasper.stop_mapping()
 		
 		# publish this grasp pose to the topic that pick-place pipeline expects
@@ -364,12 +364,12 @@ while not rospy.is_shutdown():
 			# If so, we can stop here
 			break
 		else:
-			debug_try_once_more = True
+			debug_try_once_more = False
 			if debug_try_once_more:
 				grasper.start_mapping()
 				rospy.loginfo("Clearing octomap")
 				grasper.clear_octomap_srv.call(EmptyRequest())
-				rospy.sleep(1.0)
+				# rospy.sleep(1.0)
 				grasper.stop_mapping()
 				# Now call the pick service and wait for the result
 				rospy.loginfo("[Calling pick service...]")
