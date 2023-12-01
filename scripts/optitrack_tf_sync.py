@@ -86,8 +86,26 @@ while not rospy.is_shutdown():
 	table_marker_msg.pose.position.y = 0.0
 	table_marker_msg.pose.position.z = -table_marker_msg.scale.z/2.0# - 0.005 # TEMP: Move table down a bit
 	obj_markers_msg.markers.append(table_marker_msg)
+	
+
+	# TEMP: Add another marker for the shelf for the unseen right side
+	# make a copy of table_marker_msg
+	shelf_marker_msg = deepcopy(table_marker_msg)
+	shelf_marker_msg.id = 11
+	shelf_marker_msg.scale.x = 0.4
+	shelf_marker_msg.scale.y = 0.05
+	shelf_marker_msg.scale.z = 0.7
+	shelf_marker_msg.pose.position.x = 0.1
+	shelf_marker_msg.pose.position.y = -0.35
+	shelf_marker_msg.pose.position.z += 0.35
+	obj_markers_msg.markers.append(shelf_marker_msg)
+
+
 	# Publish
 	obj_markers_pub.publish(obj_markers_msg)
+
+
+
 	
 
 	rate.sleep()

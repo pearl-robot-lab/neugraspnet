@@ -52,9 +52,15 @@ class GraspGenerator:
 			self.pcl_topic_name = "/zed2/zed_node/point_cloud/cloud_registered"
 			self.depth_topic_name = "/zed2/zed_node/depth/depth_registered"
 			# camera intrinsic parameters (TODO: Get this from /zed2/zed_node/depth/camera_info topic)
+			# 720p
 			self.camera_intrinsic = CameraIntrinsic(width=640, height=360,
 													fx=262.1390075683594, fy=262.1390075683594,
 													cx=311.67730712890625, cy=185.56422424316406)
+			# VGA
+			# self.camera_intrinsic = CameraIntrinsic(width=336, height=188,
+			# 										fx=132.06214904785156, fy=132.06214904785156,
+			# 										cx=161.06512451171875, cy=97.46347045898438)								
+										   
 		elif self.camera_type == 'xtion':
 			self.pcl_topic_name = "/xtion/depth_registered/points"
 			self.depth_topic_name = "/xtion/depth/image_rect"
@@ -89,7 +95,7 @@ class GraspGenerator:
 			with open('reach_maps/smaller_full_reach_map_gripper_right_grasping_frame_torso_False_0.05.pkl', 'rb') as f:
 				self.right_reachability_map = pickle.load(f)
 
-		self.setup_grasp_planner(model=net_path, type=net_type, qual_th=0.4, aff_thresh=0.5, force=False, seen_pc_only=False)
+		self.setup_grasp_planner(model=net_path, type=net_type, qual_th=0.5, aff_thresh=0.5, force=False, seen_pc_only=False)
 		
 		self.o3d_vis = None # open3d visualizer
 
@@ -197,6 +203,8 @@ class GraspGenerator:
 		# o3d.visualization.draw_geometries([pcl_tsdf, self.pcd])
 
 		pcd_down = self.pcd.voxel_down_sample(voxel_size=self.downsampl_size)
+		# Optional: crop to scene size
+		# pcd_down = pcd_down.crop(o3d.geometry.AxisAlignedBoundingBox(min_bound=(0, 0, 0), max_bound=(self.size, self.size, self.size)))
 
 		# Debug: viz pcd and down pcd
 		# pcd_down.colors = o3d.utility.Vector3dVector(np.tile(np.array([0, 0, 0]), (np.asarray(pcd_down.points).shape[0], 1)))
@@ -215,7 +223,9 @@ class GraspGenerator:
 		
 		# build state
 		state = argparse.Namespace(tsdf=tsdf, pc=pc)
-
+		# TEMP: Explicit running viz of the scene point clouds and meshes
+		self.o3d_vis = o3d.visualization.Visualizer()
+		self.o3d_vis.create_window(width=1920, height=1016)
 		if self.o3d_vis is not None:
 			# Running viz of the scene point clouds and meshes
 			self.o3d_vis.clear_geometries() # clear previous geometries
@@ -225,12 +235,12 @@ class GraspGenerator:
 			self.o3d_vis.update_renderer()			
 			# Reset view
 			ctr = grasp_gen.o3d_vis.get_view_control()
-			parameters = o3d.io.read_pinhole_camera_parameters(os.path.dirname(os.path.abspath(__file__))+"/../neugraspnet_repo/ScreenCamera_2023-11-10-12-39-50.json")
+			parameters = o3d.io.read_pinhole_camera_parameters(os.path.dirname(os.path.abspath(__file__))+"/../neugraspnet_repo/ScreenCamera_2023-11-30-11-20-31.json")
 			ctr.convert_from_pinhole_camera_parameters(parameters)
 			for i in range(50):
 				grasp_gen.o3d_vis.poll_events()
 				grasp_gen.o3d_vis.update_renderer()
-        
+			
 		# dummy sim just for parameters. TODO: clean this up
 		sim = ClutterRemovalSim('pile', 'pile/test', gripper_type='robotiq', gui=False, data_root=os.path.dirname(os.path.abspath(__file__))+'/../neugraspnet_repo/')
 
@@ -361,11 +371,11 @@ rospy.init_node('grasp_generator')
 grasp_gen = GraspGenerator(net_type='neu_grasp_pn_affnet', camera_type='zed')
 
 # Optional visualization
-visualize = True
+visualize = False
 if visualize:
 	# Running viz of the scene point clouds and meshes
 	grasp_gen.o3d_vis = o3d.visualization.Visualizer()
-	grasp_gen.o3d_vis.create_window(width=1853, height=1025)
+	grasp_gen.o3d_vis.create_window(width=1920, height=1016)
 	
 	# # DEBUG: run grasp generator
 	# while(1):

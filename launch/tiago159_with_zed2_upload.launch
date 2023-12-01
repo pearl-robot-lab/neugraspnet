@@ -4,7 +4,8 @@
   <arg name="arm_right"  default="True"/>
   <arg name="wrist_left_model"  default="wrist-2017"/>
   <arg name="wrist_right_model"  default="wrist-2017"/>
-  <arg name="end_effector_left"  default="robotiq-2f-85"/>
+  <!-- <arg name="end_effector_left"  default="robotiq-2f-85"/> -->
+  <arg name="end_effector_left"  default="pal-gripper"/>
   <arg name="end_effector_right"  default="robotiq-2f-85"/>
   <arg name="ft_sensor_left"  default="schunk-ft"/>
   <arg name="ft_sensor_right"  default="schunk-ft"/>
