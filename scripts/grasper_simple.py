@@ -358,7 +358,7 @@ while not rospy.is_shutdown():
 	# play_m_ac.send_goal_and_wait(pmg)
 	# rospy.sleep(1.0)
 	# Move torso down (TODO: move to randomized torso and head position)
-	# move_torso(torso_cmd, 0.1)
+	move_torso(torso_cmd, 0.1)
 	# rospy.sleep(3.0)
 
 	# Get grasps from the grasp generator
@@ -422,14 +422,17 @@ while not rospy.is_shutdown():
 		grasper.gripper_grasp_srv()
 
 		# Move torso up
-		move_torso(torso_cmd, 0.35)
+		move_torso(torso_cmd, 0.32)
 		rospy.sleep(3.0)
 
 		# Optional: post retreat motion planning
 		success = grasper.exec_post_retreat()
 		if not success:
-			rospy.loginfo("Post retreat motion plan failed. Aborting...")
-			break
+			# try once again
+			success = grasper.exec_post_retreat()
+			if not success:
+				rospy.loginfo("Post retreat motion plan failed. Aborting...")
+				break
 
 		rospy.loginfo("Moving arm to final pose")
 		pmg = PlayMotionGoal()
