@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+ <!-- tiago_dual_gazebo.launch -->
+<launch>
+
+  <!-- Switch robot description to the one with zed -->
+  <include file="$(find neugraspnet)/launch/tiago159_with_zed2_upload.launch"/>
+  <!-- start robot state publisher again to publish zed static tfs -->
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" respawn="true" output="screen" />
+
+  <!-- Optional: If using optitrack with markers on the tiago torso: -->
+  <!-- 1. Launch natnet bridge to get optitrack tfs -->
+  <include file="$(find natnet_bridge)/launch/natnet_bridge.launch"/>
+  <!-- 2. Sync tiago torso lift link TF with optitrack -->
+  <node name="optitrack_tf_sync" pkg="neugraspnet" type="optitrack_tf_sync.py" output="screen"/>
+
+  <!-- Optional: Viz in rviz -->
+  <node pkg="rviz" type="rviz" output="screen" name="rviz" args="-d $(find neugraspnet)/rviz/rviz.rviz" />
+
+  <!-- Optional: launch navigation -->
+  <!-- <node name="navigation_rviz" pkg="rviz" type="rviz" args="-d $(find tiago_dual_2dnav)/config/rviz/advanced_navigation.rviz" /> -->
+
+</launch>

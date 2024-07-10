@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+ <!-- tiago_dual_gazebo.launch -->
+<launch>
+  <arg name="world"  default="empty"/>  <!-- empty, ... (see ../worlds) -->
+  <arg name="arm_left"  default="True"/>
+  <arg name="arm_right"  default="True"/>
+  <arg name="end_effector_left"  default="pal-hey5"/>
+  <arg name="end_effector_right"  default="pal-hey5"/>
+  <arg name="ft_sensor_left"  default="schunk-ft"/>
+  <arg name="ft_sensor_right"  default="schunk-ft"/>
+  <arg name="laser_model"  default="sick-571"/>
+  <arg name="camera_model"  default="orbbec-astra"/>
+  <arg name="has_screen"  default="False"/>
+  <arg name="multi" default=""/>
+  <arg name="gzpose" default="-x 0.0 -y 0.0 -z 0.0 -R 0.0 -P 0.0 -Y 0.0"/>
+  <arg name="gui" default="true"/>
+  <arg name="debug" default="false"/>
+  <arg name="public_sim" default="false"/>
+  <arg name="tuck_arm" default="true"/>
+  <arg name="recording" default="false"/>
+  <arg name="extra_gazebo_args" default=""/>
+  <arg name="use_moveit_camera" default="false"/>
+  <arg name="base_type" default="pmb2"/>
+
+  <env name="LC_NUMERIC" value="C" />
+
+  <!-- start up world -->
+  <include file="$(find pal_gazebo_worlds)/launch/pal_gazebo.launch">
+    <arg name="world" value="$(arg world)"/>
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="debug" value="$(arg debug)"/>
+    <arg name="recording" value="$(arg recording)"/>
+    <arg name="extra_gz_model_path" value="$(find tiago_gazebo)/models"/>
+    <arg name="extra_gz_resource_path" value="$(find tiago_gazebo)"/>
+    <arg name="extra_gazebo_args" value="$(arg extra_gazebo_args)"/>
+  </include>
+
+  <!-- spawn robot in simulation -->
+  <include file="$(find tiago_dual_gazebo)/launch/tiago_dual_spawn.launch">
+    <arg name="arm_left"  value="$(arg arm_left)"/>
+    <arg name="arm_right"  value="$(arg arm_right)"/>
+    <arg name="end_effector_left"  value="$(arg end_effector_left)"/>
+    <arg name="end_effector_right"  value="$(arg end_effector_right)"/>
+    <arg name="ft_sensor_left"  value="$(arg ft_sensor_left)"/>
+    <arg name="ft_sensor_right"  value="$(arg ft_sensor_right)"/>
+    <arg name="has_screen"  value="$(arg has_screen)"/>
+    <arg name="laser_model"  value="$(arg laser_model)"/>
+    <arg name="camera_model"  value="$(arg camera_model)"/>
+    <arg name="multi" value="$(arg multi)"/>
+    <arg name="gzpose" value="$(arg gzpose)"/>
+    <arg name="base_type" value="$(arg base_type)"/>
+  </include>
+
+  <!-- bring up robot -->
+  <include file="$(find tiago_dual_gazebo)/launch/simulation_tiago_dual_bringup.launch">
+    <arg name="arm_left"  value="$(arg arm_left)"/>
+    <arg name="arm_right"  value="$(arg arm_right)"/>
+    <arg name="end_effector_left"  value="$(arg end_effector_left)"/>
+    <arg name="end_effector_right"  value="$(arg end_effector_right)"/>
+    <arg name="ft_sensor_left"  value="$(arg ft_sensor_left)"/>
+    <arg name="ft_sensor_right"  value="$(arg ft_sensor_right)"/>
+    <arg name="laser_model" value="$(arg laser_model)"/>
+    <arg name="camera_model" value="$(arg camera_model)"/>
+    <arg name="public_sim"  value="$(arg public_sim)"/>
+    <arg name="use_moveit_camera" value="$(arg use_moveit_camera)"/>
+    <arg name="base_type" value="$(arg base_type)"/>
+  </include>
+
+  <!-- point cloud throttle and filter -->
+  <group unless="$(arg public_sim)">
+    <include file="$(find pal_pcl_points_throttle_and_filter)/launch/throttle_filtering_points.launch">
+      <arg name="cloud"  value="/xtion/depth_registered/points"/>
+    </include>
+  </group>
+
+  <group if="$(arg tuck_arm)">
+      <node name="tuck_arm" pkg="tiago_gazebo" type="tuck_arm.py" output="screen"/>
+  </group>
+  <node name="image_proc" pkg="image_proc" type="image_proc" ns="xtion/rgb"/>
+
+  <!-- zed2.launch -->
+  <!-- Note: make sure the camera is not publishing its own tfs and position tracking! -->  
+  <arg name="svo_file"             default="" /> <!-- <arg name="svo_file" default="path/to/svo/file.svo"> -->
+  <arg name="stream"               default="" /> <!-- <arg name="stream" default="<ip_address>:<port>"> -->
+  <arg name="node_name"            default="zed_node" />
+  <arg name="camera_model"         default="zed2" />
+  <arg name="publish_urdf"         default="true" />
+  <arg name="camera_name"          default="zed2" />
+  <arg name="base_frame"           default="base_link" />
+
+  <arg name="cam_pos_x"             default="0.0" /> <!-- Position respect to base frame (i.e. "base_link) -->
+  <arg name="cam_pos_y"             default="0.0" /> <!-- Position respect to base frame (i.e. "base_link) -->
+  <arg name="cam_pos_z"             default="0.0" /> <!-- Position respect to base frame (i.e. "base_link) -->
+  <arg name="cam_roll"              default="0.0" /> <!-- Orientation respect to base frame (i.e. "base_link) -->
+  <arg name="cam_pitch"             default="0.0" /> <!-- Orientation respect to base frame (i.e. "base_link) -->
+  <arg name="cam_yaw"               default="0.0" /> <!-- Orientation respect to base frame (i.e. "base_link) -->
+
+  <group ns="$(arg camera_name)">
+      <include file="$(find zed_wrapper)/launch/include/zed_camera.launch.xml">
+          <arg name="camera_name"         value="$(arg camera_name)" />
+          <arg name="svo_file"            value="$(arg svo_file)" />
+          <arg name="stream"              value="$(arg stream)" />
+          <arg name="node_name"           value="$(arg node_name)" />
+          <arg name="camera_model"        value="$(arg camera_model)" />
+          <arg name="base_frame"          value="$(arg base_frame)" />
+          <arg name="publish_urdf"        value="$(arg publish_urdf)" />
+          <arg name="cam_pos_x"           value="$(arg cam_pos_x)" />
+          <arg name="cam_pos_y"           value="$(arg cam_pos_y)" />
+          <arg name="cam_pos_z"           value="$(arg cam_pos_z)" />
+          <arg name="cam_roll"            value="$(arg cam_roll)" />
+          <arg name="cam_pitch"           value="$(arg cam_pitch)" />
+          <arg name="cam_yaw"             value="$(arg cam_yaw)" />
+      </include>
+  </group> 
+</launch>
