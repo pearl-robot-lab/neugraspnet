@@ -38,6 +38,11 @@
     ```
     pip install torch==1.13.0 torch-scatter==2.1.0 torchvision==0.14.0 -f https://data.pyg.org/whl/torch-1.13.0+cu117.html
     ```
+- Install the neugraspnet package:
+  ```
+  cd <this repo>
+  pip install -e .
+  ```
 - Build the conv_occupancy_network dependency:
     ```
     python neugraspnet/scripts/convonet_setup.py build_ext --inplace
