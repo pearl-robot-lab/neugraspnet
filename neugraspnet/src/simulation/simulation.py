@@ -22,9 +22,10 @@ class ClutterRemovalSim(object):
             self.egad_root = Path(data_root) / self.egad_root
         self.scene = scene
         self.object_set = object_set
-        self.discover_objects()
+        if 'pile' in object_set or 'packed' in object_set:
+            self.discover_objects()
         if object_set == 'egad':
-            self.disscover_egad_files()
+            self.discover_egad_files()
 
         self.global_scaling = {
             "blocks": 1.67,
@@ -56,7 +57,7 @@ class ClutterRemovalSim(object):
         root = self.urdf_root / self.object_set
         self.object_urdfs = [f for f in root.iterdir() if f.suffix == ".urdf"]
 
-    def disscover_egad_files(self):
+    def discover_egad_files(self):
         self.obj_egads = [f for f in self.egad_root.iterdir() if f.suffix=='.obj']
 
     def save_state(self):

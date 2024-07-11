@@ -22,7 +22,8 @@ def main(args):
                                     out_th=0.1,
                                     select_top=False,
                                     resolution=args.resolution,
-                                    visualize=args.vis)
+                                    visualize=args.vis,
+                                    max_grasp_queries_at_once=args.max_grasp_queries_at_once)
     else:
         raise NotImplementedError(f'model type {args.type} not implemented!')
 
@@ -160,6 +161,7 @@ if __name__ == "__main__":
         type=str,
         default='',
         help="Whether add noise to depth observation, trans | dex | norm | ''")
+    parser.add_argument("--max_grasp_queries_at_once", type=int, default=40) # Based on GPU memory available
     parser.add_argument("--sideview",
                         action="store_true",
                         help="Whether to look from one side")
