@@ -91,46 +91,12 @@ def run(
     planning_times = []
     total_times = []
 
-    debug_validation = False
-    if debug_validation:
-        # import pdb; pdb.set_trace()
-        raw_root = Path('/home/sjauhri/IAS_WS/potato-net/GIGA-TSDF/GIGA-6DoF/data/pile/data_pile_train_random_raw_4M_radomized_views')
-        root = Path('/home/sjauhri/IAS_WS/potato-net/GIGA-TSDF/GIGA-6DoF/data/pile/data_pile_train_constructed_4M_HighRes_radomized_views_GPG_only')
-        df = io.read_df_with_surface_clouds(raw_root)
-    debug_egad = False
-    if debug_egad:
-        import glob
-        previous_root = Path('/home/sjauhri/IAS_WS/potato-net/GIGA-TSDF/GIGA-6DoF/data/pile/data_pile_train_random_raw_4M_radomized_views')
-        # previous_root = Path('/home/sjauhri/IAS_WS/potato-net/GIGA-TSDF/GIGA-6DoF/data/pile/data_pile_train_random_raw_GPG_EGAD_Rand_Scaling')
-        mesh_list_files = glob.glob(os.path.join(previous_root, 'mesh_pose_list', '*.npz'))
     for _ in tqdm.tqdm(range(num_rounds), disable=silence):
-        data_for_scene = None
-        if debug_validation:
-            # pick a random entry from the dataset
-            idx = np.random.randint(len(df))
-            # import pdb; pdb.set_trace()
-            data_entry = df.iloc[idx]
-            scene_id = data_entry['scene_id']
-            data_for_scene = df[df['scene_id'] == data_entry['scene_id']]
-            # setup scene
-            mesh_pose_filename = scene_id + ".npz"
-            mesh_pose_list = np.load(raw_root / "mesh_pose_list" / mesh_pose_filename, allow_pickle=True)['pc']
-            sim.setup_sim_scene_from_mesh_pose_list(mesh_pose_list)
-        else:
-            if visualize and o3d_vis is not None:
-                o3d_vis.clear_geometries()
-                o3d_vis.poll_events()
-            if debug_egad:
-                index = np.random.randint(len(mesh_list_files))
-                # OR pick a specific scene id
-                # mesh_list_file = os.path.join(previous_root, 'mesh_pose_list','b31f9f9fc41c403f94626870c9a3ba20.npz')
-                # mesh_list_file = os.path.join(previous_root, 'mesh_pose_list','dc43a8ed0de4413ab493da52a4fb7240.npz')
-                mesh_list_file = os.path.join(previous_root, 'mesh_pose_list','cb86942953b5454fa18e1647cf7d7753.npz')
-                mesh_pose_list = np.load(mesh_list_file, allow_pickle=True)['pc']
-                # mesh_pose_list = np.load(mesh_list_files[index], allow_pickle=True)['pc']
-                sim.setup_sim_scene_from_mesh_pose_list(mesh_pose_list, table=True)
-            else:
-                sim.reset(num_objects)
+
+        if visualize and o3d_vis is not None:
+            o3d_vis.clear_geometries()
+            o3d_vis.poll_events()
+        sim.reset(num_objects)
 
         round_id = logger.last_round_id() + 1
         logger.log_round(round_id, sim.num_objects)
@@ -157,10 +123,6 @@ def run(
                 # if len(pc_extended.points) >= 1000:
                 #     break
             
-            if debug_validation:
-                # Use tsdf from the dataset
-                tsdf = io.read_voxel_grid(root, scene_id)
-            
             state = argparse.Namespace(tsdf=tsdf, pc=pc)#, pc_extended=pc_extended)
             # if resolution != 40:
             #     extra_tsdf, _, _ = sim.acquire_tsdf(n=n, N=N, resolution=resolution)
@@ -178,14 +140,14 @@ def run(
                 # Also return the scene mesh with or without grasps
                 mesh_pose_list = get_mesh_pose_list_from_world(sim.world, object_set)
                 scene_mesh = get_scene_from_mesh_pose_list(mesh_pose_list)
-                grasps, scores, unseen_flags, timings["planning"], visual_mesh = grasp_plan_fn(state, scene_mesh, sim=sim, debug_data=data_for_scene, seed=seed, o3d_vis=o3d_vis, first_call=first_call)
+                grasps, scores, unseen_flags, timings["planning"], visual_mesh = grasp_plan_fn(state, scene_mesh, sim=sim, debug_data=None, seed=seed, o3d_vis=o3d_vis, first_call=first_call)
                 first_call = False
                 # assert not visual_mesh.is_empty
                 # o3d.visualization.draw_geometries([visual_mesh.as_open3d])
                 # logger.log_mesh(scene_mesh, visual_mesh, f'round_{round_id:03d}_trial_{trial_id:03d}')
                 
             else:
-                grasps, scores, unseen_flags, timings["planning"] = grasp_plan_fn(state, sim=sim, debug_data=data_for_scene, seed=seed)
+                grasps, scores, unseen_flags, timings["planning"] = grasp_plan_fn(state, sim=sim, debug_data=None, seed=seed)
             planning_times.append(timings["planning"])
             total_times.append(timings["planning"] + timings["integration"])
 
@@ -213,9 +175,8 @@ def run(
                 else:
                     seen_success += 1
 
-            if not debug_validation:
-                # log the grasp
-                logger.log_grasp(round_id, state, timings, grasp, score, label)
+            # log the grasp
+            logger.log_grasp(round_id, state, timings, grasp, score, label)
 
             if last_label == Label.FAILURE and label == Label.FAILURE:
                 consecutive_failures += 1
@@ -225,8 +186,6 @@ def run(
                 cons_fail += 1
             last_label = label
 
-            if debug_validation:
-                break
         left_objs += sim.num_objects
     success_rate = 100.0 * success / cnt
     seen_success_rate = 100.0 * seen_success / seen_cnt

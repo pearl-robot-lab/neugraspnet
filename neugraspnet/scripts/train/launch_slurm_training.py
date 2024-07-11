@@ -19,7 +19,7 @@ N_CORES = 45 #N_EXPS_IN_PARALLEL # HRZ nodes have 96 cores
 MEMORY_PER_CORE = 1600
 # PARTITION = 'dgx' # 'amd2,amd'  # 'amd', 'rtx'
 GRES = 'gpu' # if USE_CUDA else None  # gpu:rtx2080:1, gpu:rtx3080:1
-CONDA_ENV = 'GIGA-6DoF'
+CONDA_ENV = 'neugraspnet'
 
 launcher = Launcher(
     exp_name='train_neural_grasp_PN_deeper_DIMS_MIXED_WITH_occ',

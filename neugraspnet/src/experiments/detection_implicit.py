@@ -174,76 +174,59 @@ class NeuGraspImplicit(object):
                     encoded_tsdf = self.net.encode_inputs(torch.from_numpy(tsdf_vol).to(self.device))
                 pc_extended = get_scene_surf_render(sim, size, self.resolution, self.net, encoded_tsdf, device=self.device)
 
-        if debug_data is not None:
-            # debug validation
-            # get grasps from dataset
-            grasps, pos_queries, rot_queries, debug_labels = [], [], [], []
-            # Optional: Use only successful grasps for debug
-            # debug_data = debug_data[debug_data["label"] == 1]
-            for i in debug_data.index:
-                rota = debug_data.loc[i, "qx":"qw"].to_numpy(np.single)
-                posi = debug_data.loc[i, "x":"z"].to_numpy(np.single)
-                grasps.append(Grasp(Transform(Rotation.from_quat(rota), posi), sim.gripper.max_opening_width))
-                pos_queries.append(posi)
-                rot_queries.append(rota)
-                debug_labels.append(debug_data.loc[i, "label"])
-                # if len(grasps) >= 16:
-                #     break
-            # best_only = False # Show all grasps and not just the best one
-        else:
-            # Use GPG grasp sampling:
-            # Optional: Get GT point cloud from scene mesh:
-            # Get scene point cloud and normals using ground truth meshes
-            # o3d_scene_mesh = scene_mesh.as_open3d
-            # o3d_scene_mesh.compute_vertex_normals()
-            # pc_extended = o3d_scene_mesh.sample_points_uniformly(number_of_points=1000)
-            # Optional: Crop pc and downsample point cloud if too large
-            lower = np.array([0.0 , 0.0 , 0.0])
-            upper = np.array([size, size, size])
-            bounding_box = o3d.geometry.AxisAlignedBoundingBox(lower, upper)
-            pc_extended = pc_extended.crop(bounding_box)
-            voxel_size = 0.005
-            pc_extended_down = pc_extended.voxel_down_sample(voxel_size)
+        # Use GPG grasp sampling:
+        # Optional: Get GT point cloud from scene mesh:
+        # Get scene point cloud and normals using ground truth meshes
+        # o3d_scene_mesh = scene_mesh.as_open3d
+        # o3d_scene_mesh.compute_vertex_normals()
+        # pc_extended = o3d_scene_mesh.sample_points_uniformly(number_of_points=1000)
+        # Optional: Crop pc and downsample point cloud if too large
+        lower = np.array([0.0 , 0.0 , 0.0])
+        upper = np.array([size, size, size])
+        bounding_box = o3d.geometry.AxisAlignedBoundingBox(lower, upper)
+        pc_extended = pc_extended.crop(bounding_box)
+        voxel_size = 0.005
+        pc_extended_down = pc_extended.voxel_down_sample(voxel_size)
 
-            if pc_extended_down.is_empty():
-                print("[Warning]: Empty point cloud input to gpg")
-                if self.visualize:
-                    return [], [], [], 0.0, scene_mesh
-                else:
-                    return [], [], [], 0.0
-            
-            sampler = GpgGraspSamplerPcl(0.05-0.0075) # Franka finger depth is actually a little less than 0.05
-            safety_dist_above_table = 0.05 # table is spawned at finger_depth
-            num_parallel = 1 # no parallel sampling for now
-            grasps, pos_queries, rot_queries, gpg_origin_points = sampler.sample_grasps_parallel(pc_extended_down, num_parallel=num_parallel, num_grasps=num_grasps_gpg, max_num_samples=180,#320
-                                                safety_dis_above_table=safety_dist_above_table, show_final_grasps=False, verbose=False,
-                                                return_origin_point=True)
-            # Optional: Find out if the point comes from a seen or unseen area
-            if (self.seen_pc_only == True):
-                unseen_flags = None # will be set to 0 for all grasps in select()
+        if pc_extended_down.is_empty():
+            print("[Warning]: Empty point cloud input to gpg")
+            if self.visualize:
+                return [], [], [], 0.0, scene_mesh
             else:
-                unseen_flags = []
-                distance_threshold = np.float32(voxel_size - 0.0001) # 4.9 mm
-                current_pc = o3d.geometry.PointCloud() # Point cloud with one point
-                for grasp, origin_point in zip(grasps, gpg_origin_points):
-                    current_pc.points = o3d.utility.Vector3dVector(np.array([origin_point]))
-                    dist = current_pc.compute_point_cloud_distance(pc_extended_down) 
-                    if dist < distance_threshold: # If close to a seen point
-                        unseen_flags.append(0) # Seen
-                    else:
-                        unseen_flags.append(1) # Unseen
-
-            # Use standard GIGA grasp sampling:
-            # points, normals = self.sample_grasp_points(pc_extended, self.finger_depth)
-            # pos_queries, rot_queries = self.get_grasp_queries(points, normals) # Grasp queries :: (pos ;xyz, rot ;as quat)
-            # best_only = True
-
-            if (len(pos_queries) < 2):
-                print("[Warning]: No grasps found by GPG")
-                if self.visualize:
-                    return [], [], [], 0.0, scene_mesh
+                return [], [], [], 0.0
+        
+        sampler = GpgGraspSamplerPcl(0.05-0.0075) # Franka finger depth is actually a little less than 0.05
+        safety_dist_above_table = 0.05 # table is spawned at finger_depth
+        num_parallel = 1 # no parallel sampling for now
+        grasps, pos_queries, rot_queries, gpg_origin_points = sampler.sample_grasps_parallel(pc_extended_down, num_parallel=num_parallel, num_grasps=num_grasps_gpg, max_num_samples=180,#320
+                                            safety_dis_above_table=safety_dist_above_table, show_final_grasps=False, verbose=False,
+                                            return_origin_point=True)
+        # Optional: Find out if the point comes from a seen or unseen area
+        if (self.seen_pc_only == True):
+            unseen_flags = None # will be set to 0 for all grasps in select()
+        else:
+            unseen_flags = []
+            distance_threshold = np.float32(voxel_size - 0.0001) # 4.9 mm
+            current_pc = o3d.geometry.PointCloud() # Point cloud with one point
+            for grasp, origin_point in zip(grasps, gpg_origin_points):
+                current_pc.points = o3d.utility.Vector3dVector(np.array([origin_point]))
+                dist = current_pc.compute_point_cloud_distance(pc_extended_down) 
+                if dist < distance_threshold: # If close to a seen point
+                    unseen_flags.append(0) # Seen
                 else:
-                    return [], [], [], 0.0
+                    unseen_flags.append(1) # Unseen
+
+        # Use standard GIGA grasp sampling:
+        # points, normals = self.sample_grasp_points(pc_extended, self.finger_depth)
+        # pos_queries, rot_queries = self.get_grasp_queries(points, normals) # Grasp queries :: (pos ;xyz, rot ;as quat)
+        # best_only = True
+
+        if (len(pos_queries) < 2):
+            print("[Warning]: No grasps found by GPG")
+            if self.visualize:
+                return [], [], [], 0.0, scene_mesh
+            else:
+                return [], [], [], 0.0
 
         # Convert to torch tensor
         pos_queries = torch.Tensor(np.array(pos_queries)).view(1, -1, 3).to(self.device)
@@ -411,8 +394,8 @@ class NeuGraspImplicit(object):
         
         # reject voxels with predicted widths that are too small or too large
         # qual_vol, width_vol = process(tsdf_process, qual_vol, rot, width_vol, out_th=self.out_th)
-        min_width=0.033
-        max_width=0.233
+        # min_width=0.033
+        # max_width=0.233
         # qual_vol[np.logical_or(width_vol < min_width, width_vol > max_width)] = 0.0
 
         # qual_vol = bound(qual_vol, voxel_size) # TODO: Check if needed

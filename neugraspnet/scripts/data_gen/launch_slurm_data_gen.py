@@ -19,7 +19,7 @@ N_CORES = 96 #N_EXPS_IN_PARALLEL # HRZ nodes have 96 cores
 MEMORY_PER_CORE = 500
 # PARTITION = 'amd2,amd'  # 'amd', 'rtx'
 # GRES = 'gpu:1' if USE_CUDA else None  # gpu:rtx2080:1, gpu:rtx3080:1
-CONDA_ENV = 'GIGA-6DoF'
+CONDA_ENV = 'neugraspnet'
 
 launcher = Launcher(
     exp_name='generate_PARTIAL_GPG_NOISY_surface_clouds',

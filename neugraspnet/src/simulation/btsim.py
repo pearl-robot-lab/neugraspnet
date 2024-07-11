@@ -29,7 +29,7 @@ nvisii_opt = {
     },
     'floor': {
         'texture':
-        '/home/sjauhri/IAS_WS/potato-net/GIGA-TSDF/GIGA-6DoF/data/urdfs/light-wood.png',
+        '/home/sjauhri/IAS_WS/potato-net/neugraspnet/data/urdfs/light-wood.png',
         'scale': [2, 2, 2],
         'position': [0.15, 0.15, 0.05],
     },
