@@ -1,8 +1,8 @@
 # NeuGraspNet: Learning Any-View 6DoF Robotic Grasping in Cluttered Scenes via Neural Surface Rendering
 
-**Authors:** Snehal Jauhri, Ishikaa Lunawat, and Georgia Chalvatzaki  
-**Institution:** PEARL Lab, TU Darmstadt, Germany [https://pearl-lab.com](https://pearl-lab.com)  
-**Published at:** RSS 2024
+**Authors:** [Snehal Jauhri](https://pearl-lab.com/people/snehal-jauhri), [Ishikaa Lunawat](https://ishikaalunawat.github.io/), and [Georgia Chalvatzaki](https://pearl-lab.com/people/georgia-chalvatzaki)  
+**Institution:** [PEARL Lab, TU Darmstadt, Germany](https://pearl-lab.com)  
+**Published at:** Robotics: Science and Systems, 2024
 
 **Project Site:** [https://sites.google.com/view/neugraspnet](https://sites.google.com/view/neugraspnet)  
 **Paper:** [https://arxiv.org/pdf/2306.07392](https://arxiv.org/pdf/2306.07392)
@@ -27,7 +27,7 @@
     conda env create -f environment.yml
     ```
 #### Or with manual conda installation:
-- Create new conda environment with python 3.8 or higher:
+- Create a new conda environment with Python 3.8 or higher:
     ```
     conda create --name neugraspnet python=3.8 
     ```
