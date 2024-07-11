@@ -7,6 +7,10 @@
 **Project Site:** [https://sites.google.com/view/neugraspnet](https://sites.google.com/view/neugraspnet)  
 **Paper:** [https://arxiv.org/pdf/2306.07392](https://arxiv.org/pdf/2306.07392)
 
+<p float="left">
+  <img src="neugraspnet.gif" width="720"/>
+</p>
+
 ## Release timeline:
 - **11th July 2024:** Initial release with pre-trained weights and simulated grasping demos
 - **August 2024:** Dataset generation and training
