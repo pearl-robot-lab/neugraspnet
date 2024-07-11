@@ -21,7 +21,7 @@ def get_network(name):
         "neu_grasp_pn_deeper": NeuGraspPNDeeper,
         "neu_grasp_pn_deeper2": NeuGraspPNDeeper2,
         "neu_grasp_pn_deeper3": NeuGraspPNDeeper3,
-        "neu_grasp_pn_deeper4": NeuGraspPNDeeper4,
+        "neu_grasp_pn_deeper_efficient": NeuGraspPNDeeperEfficient,
         "neu_grasp_pn_deeper5": NeuGraspPNDeeper5,
         "neu_grasp_pn_detach": NeuGraspPNDetach,
         "neu_grasp_pn_no_local_cloud": NeuGraspPNNoLocalCloud,
@@ -349,7 +349,7 @@ def NeuGraspPNDeeper3():
     }
     return get_model(config)
 
-def NeuGraspPNDeeper4():
+def NeuGraspPNDeeperEfficient():
     config = {
         'encoder': 'voxel_simple_local',
         'encoder_kwargs': {
