@@ -197,7 +197,7 @@ def run(
 
             # execute grasp
             grasp, score, unseen_flag = grasps[0], scores[0], unseen_flags[0]
-            print(f"[Unseen grasp?: {unseen_flag}]")
+            # print(f"[Unseen grasp?: {unseen_flag}]")
             print("[BEST Score: %.2f]" % score)
             label, _ = sim.execute_grasp(grasp, allow_contact=True)
             print("[RESULT: %s]" % label)

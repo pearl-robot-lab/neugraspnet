@@ -142,7 +142,7 @@ if __name__ == "__main__":
         help="Whether to use a TIGHT view input tsdf/point cloud. Very partial view")
     parser.add_argument(
         "--see_table",
-        type=bool, default='',
+        type=bool, default=True,
         help="Whether the network sees the table in the input tsdf/point cloud")
     parser.add_argument(
         "--seen_pc_only",

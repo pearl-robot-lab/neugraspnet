@@ -376,18 +376,6 @@ class GpgGraspSamplerPcl():
                 potential_grasps_vgn_rot_quat.extend(ret_potential_grasps_vgn_rot_quat)
                 if return_origin_point:
                     origin_points.extend(ret_origin_points)
-            
-            # # DEBUGGGGGGGGGG grasp sampling far away issue
-            # if len(processed_potential_grasps_vgn) > 0:
-            #     self.show_grasps_and_pcl_open3d(processed_potential_grasps_vgn, point_cloud)
-            #     # chosen index r_ball points:
-            #     chosen_pcd = o3d.geometry.PointCloud()
-            #     chosen_pcd.points = o3d.utility.Vector3dVector(all_points[kd_indices])
-            #     chosen_pcd.colors = o3d.utility.Vector3dVector(np.array([[0, 1, 0]] * len(indices)))
-            #     self.show_grasps_and_pcl_open3d(processed_potential_grasps_vgn, chosen_pcd)
-            #     import pdb; pdb.set_trace()
-            #     processed_potential_grasps_vgn = []
-            # # DEBUGGGGGGGGGG
 
         if show_final_grasps:
             # Show all grasps and the surface point cloud with open3d
@@ -519,9 +507,9 @@ class GpgGraspSamplerPcl():
                     dtheta = np.float64(dtheta)
                     quat = np.array([x, y, z, dtheta / 180 * np.pi])
                     rotation = Rotation.from_quat(quat).as_matrix() # NOTE this also rotates about the z axis (minor_pc) to get the correct grasping frame
-                    for dy in np.arange(-self.params['num_dy'] * self.params['gripper_finger_width'],
-                                        (self.params['num_dy'] + 1) * self.params['gripper_finger_width'],
-                                        self.params['gripper_finger_width']):
+                    for dy in np.arange(-self.params['range_dy'],
+                                        (self.params['range_dy'] + self.params['range_dy']/self.params['num_dy']),
+                                        self.params['range_dy']/self.params['num_dy']):
                         # compute centers and axes
                         tmp_major_pc = np.dot(rotation, major_pc * normal_dir)
                         tmp_grasp_normal = np.dot(rotation, new_normal * normal_dir)

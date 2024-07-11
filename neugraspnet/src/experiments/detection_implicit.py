@@ -213,7 +213,8 @@ class NeuGraspImplicit(object):
             
             sampler = GpgGraspSamplerPcl(0.05-0.0075) # Franka finger depth is actually a little less than 0.05
             safety_dist_above_table = 0.05 # table is spawned at finger_depth
-            grasps, pos_queries, rot_queries, gpg_origin_points = sampler.sample_grasps_parallel(pc_extended_down, num_parallel=24, num_grasps=num_grasps_gpg, max_num_samples=180,#320
+            num_parallel = 1 # no parallel sampling for now
+            grasps, pos_queries, rot_queries, gpg_origin_points = sampler.sample_grasps_parallel(pc_extended_down, num_parallel=num_parallel, num_grasps=num_grasps_gpg, max_num_samples=180,#320
                                                 safety_dis_above_table=safety_dist_above_table, show_final_grasps=False, verbose=False,
                                                 return_origin_point=True)
             # Optional: Find out if the point comes from a seen or unseen area
@@ -244,8 +245,8 @@ class NeuGraspImplicit(object):
                     return [], [], [], 0.0
 
         # Convert to torch tensor
-        pos_queries = torch.Tensor(pos_queries).view(1, -1, 3).to(self.device)
-        rot_queries = torch.Tensor(rot_queries).view(1, -1, 4).to(self.device)
+        pos_queries = torch.Tensor(np.array(pos_queries)).view(1, -1, 3).to(self.device)
+        rot_queries = torch.Tensor(np.array(rot_queries)).view(1, -1, 4).to(self.device)
         # Choose queries upto resolution^3 (TODO: Check if needed)
         # chosen_indices = np.random.choice(len(pos_queries),size=(self.resolution**3))
         # pos_queries = pos_queries[chosen_indices].view(1, -1, 3)
@@ -259,7 +260,6 @@ class NeuGraspImplicit(object):
         # Query network
         if 'neu' in self.model_type:
             # Also generate grasp point clouds
-            # render_settings = read_json(Path("/home/jauhri/IAS_WS/potato-net/GIGA-TSDF/GIGA-6DoF/data/pile/grasp_cloud_setup.json"))
             render_settings = read_json(Path("data/pile/grasp_cloud_setup.json"))
             # render_settings = read_json(Path("data/pile/grasp_cloud_setup_efficient.json"))
             gt_render = False
