@@ -276,7 +276,7 @@ def generate_neur_grasp_clouds(sim, render_settings, grasps, size, encoded_tsdf,
                 indices = np.random.choice(np.arange(len(down_surf_pc.points)), max_points, replace=False)
                 down_surf_pc = down_surf_pc.select_by_index(indices)
         
-            grasp_pc = torch.tensor(down_surf_pc.points, dtype=torch.float32)
+            grasp_pc = torch.tensor(np.array(down_surf_pc.points), dtype=torch.float32)
             grasp_pc_local = grasp_vgn_inv_tfs[ind] @ torch.hstack((grasp_pc, torch.ones(grasp_pc.shape[0],1))).T
             grasp_pc_local = grasp_pc_local[:3,:].T
             grasp_pc_local = grasp_pc_local / size # - 0.5 DONT SUBTRACT HERE!
