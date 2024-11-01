@@ -12,7 +12,7 @@
 </p>
 
 ## Release timeline:
-- **11th July 2024:** Initial release with pre-trained weights and simulated grasping demos
+- **11th July 2024:** Initial release with pre-trained weights and simulated grasping demos (DONE)
 - **September 2024:** Dataset generation
 - **October 2024:** Training, Inference & ROS package
 
